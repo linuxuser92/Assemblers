@@ -1079,7 +1079,11 @@ void Menu::Draw()
 
     // If no Tick RVA is configured, apply movement from the render loop instead.
     // GameHook owns this when installed, so never apply both in the same frame.
-    if (!GameHook::IsInstalled()) Features::ApplyTick();
+    if (!GameHook::IsInstalled())
+    {
+        Features::ApplyTick();
+        Features::ApplyTickPost();
+    }
 
     static bool loggedFirstFrame = false;
     if (!loggedFirstFrame)

@@ -36,6 +36,13 @@ namespace
         return (mbi.Protect & writable) != 0 && address + size <=
                reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
     }
+
+    // Position-mode fly state. We track our own Y instead of adding to the physics-updated
+    // position, so a held Space jump impulse cannot push the player above the target.
+    bool s_positionFlyActive = false;
+    uintptr_t s_positionFlyPlayer = 0;
+    float s_positionFlyY = 0.0f;
+    ULONGLONG s_positionFlyLast = 0;
 }
 
 void Features::ApplyTick()
@@ -62,33 +69,59 @@ void Features::ApplyTick()
                 WriteValue(address, velocity);
         }
     }
-    else if (s.fly && jumpHeld && g_offsets.entityPosition)
-    {
-        // Fallback for worlds where the velocity field could not be detected.
-        // Velocity mode is preferred; position mode only needs LocalPlayer + EntityPosition.
-        static ULONGLONG lastTick = 0;
-        const ULONGLONG now = GetTickCount64();
-        float delta = lastTick ? static_cast<float>(now - lastTick) / 1000.0f
-                               : 1.0f / 60.0f;
-        lastTick = now;
-        if (delta > 0.05f) delta = 0.05f; // clamp after a stall / tab switch
-
-        Vec3 position{};
-        const uintptr_t address = player + g_offsets.entityPosition;
-        if (ReadValue(address, position))
-        {
-            // flySpeed is expressed like Minecraft velocity (blocks per tick), so multiply
-            // by 20 to convert it to blocks per second for this time-based write.
-            position.y += s.flySpeed * delta * 20.0f;
-            if (std::isfinite(position.y)) WriteValue(address, position);
-        }
-    }
-
     if (s.noFallDamage && g_offsets.entityOnGround)
     {
         const bool grounded = true;
         WriteValue(player + g_offsets.entityOnGround, grounded);
     }
+}
+
+void Features::ApplyTickPost()
+{
+    const auto& s = Config::g_settings;
+
+    // Position mode is only used when velocity mode is unavailable. Velocity writes must stay
+    // in ApplyTick (before physics); position writes must happen after physics.
+    if (!s.fly || g_offsets.entityVelocity || !g_offsets.entityPosition)
+    {
+        s_positionFlyActive = false;
+        s_positionFlyLast = 0;
+        return;
+    }
+
+    const uintptr_t player = g_game.LocalPlayer();
+    if (!player) return;
+
+    Vec3 position{};
+    const uintptr_t address = player + g_offsets.entityPosition;
+    if (!ReadValue(address, position) || !std::isfinite(position.y)) return;
+
+    const ULONGLONG now = GetTickCount64();
+    float delta = 0.0f;
+    if (s_positionFlyActive && s_positionFlyPlayer == player && s_positionFlyLast)
+    {
+        delta = static_cast<float>(now - s_positionFlyLast) / 1000.0f;
+        if (delta > 0.1f) delta = 0.1f; // clamp after a stall / tab switch
+    }
+    else
+    {
+        s_positionFlyY = position.y;
+        Log("Fly position mode engaged at Y=%.2f (offset 0x%llX)",
+            position.y, static_cast<unsigned long long>(g_offsets.entityPosition));
+    }
+
+    if ((GetAsyncKeyState(VK_SPACE) & 0x8000) != 0)
+    {
+        // Use the magnitude so a negative configured speed still climbs while Space is held.
+        s_positionFlyY += std::fabs(s.flySpeed) * delta * 20.0f;
+    }
+
+    position.y = s_positionFlyY;
+    if (std::isfinite(position.y)) WriteValue(address, position);
+
+    s_positionFlyActive = true;
+    s_positionFlyPlayer = player;
+    s_positionFlyLast = now;
 }
 
 void Features::ApplyWorld()

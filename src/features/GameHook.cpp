@@ -15,6 +15,7 @@ namespace
         Features::ApplyTick();
         using Fn = void(STDMETHODCALLTYPE*)(void*, float);
         reinterpret_cast<Fn>(originalTick)(self, deltaTime);
+        Features::ApplyTickPost();
     }
 }
 

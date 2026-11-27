@@ -23,8 +23,12 @@ This is experimental software. Read this before reporting an issue:
   preferred. If velocity cannot be detected, enabling Fly automatically tries the position
   fallback (no jumping required); if that also fails it starts the velocity scan: **release
   `Space`, then press and hold it once**. You can force the fallback manually with **Detect
-  position (fly)** in the Offsets tab. A toast confirms success; if it fails, check the `F9` log
-  for `AutoDetect:` lines, which now include the top velocity candidates.
+  position (fly)** in the Offsets tab. In position mode the mod re-asserts your Y after each
+  game tick: **hold `Space` to climb, release it to hover**. The configured `FlySpeed` magnitude
+  is used, so a negative value still climbs. If you still jump normally, the detected
+  `EntityPosition` is likely the wrong vector — compare the HUD coordinates with the game's
+  coordinate display and re-run detection with **Filter by coordinates** enabled. Check the `F9`
+  log for `AutoDetect:` lines, which include the top velocity candidates and the position offset.
 - **ESP requires several values:** `LocalPlayer`, `Level` (or `Patterns.Level`),
   `LevelEntityList`, `EntityPosition`, `Camera` (or `Patterns.Camera`), and `ViewProj`. Missing ones
   are marked `MISSING` in the ESP tab, and the HUD shows `unavailable` for coordinates/speed.
