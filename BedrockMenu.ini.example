@@ -1,0 +1,34 @@
+; Copy this file next to BedrockMenu.dll as BedrockMenu.ini
+; Hotkeys: Insert = menu, F9 = debug console (live log), End = unload.
+; All addresses are RVAs (address - game module base). 0 = feature disabled.
+
+[General]
+; All risky features are OFF by default. Enable one at a time to isolate crashes.
+ShowConsole=0
+; 1 = skip Win32 backend + WndProc subclass (safer for UWP; overlay drawn, no mouse input)
+DisableImGuiInput=1
+; 0 = enable dummy-swapchain Present fallback (only needed for late injection)
+DisableLateHook=1
+; 0 = enable D3D12 hooks + overlay
+DisableD3DHooks=1
+
+[Addresses]
+Tick=0x0
+LocalPlayer=0x0
+Gamma=0x0
+
+[Offsets]
+LevelEntityList=0x0
+LevelTime=0x0
+EntityListStride=8
+EntityPosition=0x0
+EntityVelocity=0x0
+EntityOnGround=0x0
+EntityName=0x0
+PlayerVTable=0x0
+ViewProj=0x0
+MatrixTransposed=0
+
+[Patterns]
+Level=
+Camera=

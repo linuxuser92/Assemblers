@@ -1,0 +1,94 @@
+#include "Features.h"
+#include "common.h"
+#include "Config.h"
+#include "Game.h"
+
+#include <cmath>
+#include <cstring>
+
+namespace
+{
+    bool CanWrite(uintptr_t address, size_t size);
+
+    template <typename T>
+    bool ReadValue(uintptr_t address, T& out)
+    {
+        if (!CanRead(reinterpret_cast<const void*>(address), sizeof(T))) return false;
+        std::memcpy(&out, reinterpret_cast<const void*>(address), sizeof(T));
+        return true;
+    }
+
+    template <typename T>
+    bool WriteValue(uintptr_t address, const T& value)
+    {
+        if (!CanWrite(address, sizeof(T))) return false;
+        std::memcpy(reinterpret_cast<void*>(address), &value, sizeof(T));
+        return true;
+    }
+
+    bool CanWrite(uintptr_t address, size_t size)
+    {
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (!VirtualQuery(reinterpret_cast<const void*>(address), &mbi, sizeof(mbi))) return false;
+        if (mbi.State != MEM_COMMIT) return false;
+        const DWORD writable = PAGE_READWRITE | PAGE_WRITECOPY |
+                               PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+        return (mbi.Protect & writable) != 0 && address + size <=
+               reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+    }
+}
+
+void Features::ApplyTick()
+{
+    const auto& s = Config::g_settings;
+    if (!s.fly && s.speedMultiplier == 1.0f && !s.noFallDamage) return;
+
+    const uintptr_t player = g_game.LocalPlayer();
+    if (!player) return;
+
+    const bool jumpHeld = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+    if ((s.fly || s.speedMultiplier != 1.0f) && g_offsets.entityVelocity)
+    {
+        Vec3 velocity{};
+        const uintptr_t address = player + g_offsets.entityVelocity;
+        if (ReadValue(address, velocity))
+        {
+            // UI says "hold jump": only override vertical velocity while Space is down.
+            if (s.fly && jumpHeld) velocity.y = s.flySpeed;
+            velocity.x *= s.speedMultiplier;
+            velocity.z *= s.speedMultiplier;
+            if (std::isfinite(velocity.x) && std::isfinite(velocity.y) && std::isfinite(velocity.z))
+                WriteValue(address, velocity);
+        }
+    }
+
+    if (s.noFallDamage && g_offsets.entityOnGround)
+    {
+        const bool grounded = true;
+        WriteValue(player + g_offsets.entityOnGround, grounded);
+    }
+}
+
+void Features::ApplyWorld()
+{
+    const auto& s = Config::g_settings;
+
+    if (g_offsets.gammaAddress && s.fullbright)
+    {
+        const float value = s.brightness;
+        WriteValue(g_offsets.gammaAddress, value);
+    }
+
+    const uintptr_t level = g_game.Level();
+    if (level && g_offsets.levelTime && s.setTime)
+    {
+        const float value = s.timeOfDay;
+        WriteValue(level + g_offsets.levelTime, value);
+    }
+}
+
+void Features::Restore()
+{
+    // Values are only written while their feature is enabled, so there is nothing persistent
+    // to restore. This hook exists for future patches that need cleanup on unload.
+}

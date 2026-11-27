@@ -1,0 +1,28 @@
+# Build outputs
+build/
+build-test/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.obj
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.exe
+*.dll
+*.log
+
+# Editors / local machine config
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+
+# Local dependency metadata (vendored dependency source is committed)
+deps/*/.git/
+deps/*/.git-local-backup/
+
+# Runtime config / logs (keep BedrockMenu.ini.example tracked)
+BedrockMenu.ini
