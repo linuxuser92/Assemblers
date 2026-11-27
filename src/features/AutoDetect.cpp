@@ -54,6 +54,11 @@ namespace
                std::fabs(v.y) < 500.0f &&
                std::fabs(v.z) < 500.0f;
     }
+
+    float MaxAbs(const Vec3& v)
+    {
+        return (std::max)({ std::fabs(v.x), std::fabs(v.y), std::fabs(v.z) });
+    }
 }
 
 std::vector<AutoDetect::PlayerCandidate> AutoDetect::FindPlayerCandidates()
@@ -110,70 +115,65 @@ std::vector<AutoDetect::PlayerCandidate> AutoDetect::FindPlayerCandidates()
 bool AutoDetect::DetectEntityPosition(uintptr_t player, const Vec3& expected, uint64_t& offset)
 {
     offset = 0;
-    if (!player) return false;
-
-    const bool haveExpected = PlausiblePlayerPosition(expected);
-
-    // Pass 1: match the known coordinates closely. This is the most reliable path when the
-    // user has Show Coordinates enabled and typed the current X/Y/Z into the offset tab.
-    // Pass 2: otherwise pick a stable, plausible position vector with a large magnitude,
-    // which distinguishes it from near-zero velocity vectors.
-    for (int pass = 0; pass < 2; ++pass)
+    if (!player || !PlausiblePlayerPosition(expected))
     {
-        if (pass == 1 && haveExpected)
+        Log("AutoDetect: position detection needs valid X/Y/Z (enable Show coordinates)");
+        return false;
+    }
+
+    // Only accept a vector that closely matches known coordinates. The old "largest plausible
+    // vector" fallback picked unrelated fields (e.g. 0x1A0 with Y=0) and broke Fly.
+    double bestScore = -1.0;
+    uint64_t bestOffset = 0;
+
+    for (uint64_t candidate = 0; candidate <= 0x800; candidate += 4)
+    {
+        Vec3 first{};
+        if (!ReadVec3(player + candidate, first)) continue;
+        if (!PlausiblePlayerPosition(first)) continue;
+
+        Vec3 second{};
+        if (!ReadVec3(player + candidate, second) || !SameVec3(first, second)) continue;
+
+        const double dx = first.x - expected.x;
+        const double dy = first.y - expected.y;
+        const double dz = first.z - expected.z;
+        const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (distance > 25.0) continue; // coordinates can tick between scan and apply
+
+        const double score = 1000.0 - distance;
+        if (score > bestScore)
         {
-            Log("AutoDetect: position did not match coordinates; using stable-vector fallback");
-        }
-
-        double bestScore = -1.0;
-        uint64_t bestOffset = 0;
-
-        for (uint64_t candidate = 0; candidate <= 0x800; candidate += 4)
-        {
-            Vec3 first{};
-            if (!ReadVec3(player + candidate, first)) continue;
-            if (!PlausiblePlayerPosition(first)) continue;
-
-            // Require two identical reads so transient/uninitialized floats are skipped.
-            Vec3 second{};
-            if (!ReadVec3(player + candidate, second) || !SameVec3(first, second)) continue;
-
-            double score = 0.0;
-            if (pass == 0 && haveExpected)
-            {
-                const double dx = first.x - expected.x;
-                const double dy = first.y - expected.y;
-                const double dz = first.z - expected.z;
-                const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-                if (distance > 8.0) continue; // coordinates can tick between scan and apply
-                score = 1000.0 - distance;
-            }
-            else
-            {
-                const double magnitude = (std::max)({ std::fabs(first.x),
-                                                      std::fabs(first.y),
-                                                      std::fabs(first.z) });
-                if (magnitude < 2.0) continue; // velocity-like values are usually near zero
-                score = magnitude;
-            }
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestOffset = candidate;
-            }
-        }
-
-        if (bestOffset)
-        {
-            offset = bestOffset;
-            Log("AutoDetect: position offset 0x%llX (pass %d, score %.2f)",
-                static_cast<unsigned long long>(bestOffset), pass + 1, bestScore);
-            return true;
+            bestScore = score;
+            bestOffset = candidate;
         }
     }
 
-    Log("AutoDetect: no stable position vector found in the first 0x800 bytes of the player");
+    if (!bestOffset)
+    {
+        Log("AutoDetect: no position vector matched the current coordinates");
+        return false;
+    }
+
+    offset = bestOffset;
+    Log("AutoDetect: position offset 0x%llX (distance score %.2f)",
+        static_cast<unsigned long long>(bestOffset), bestScore);
+    return true;
+}
+
+bool AutoDetect::DetectEntityPositionFromPlayer(uintptr_t player, uint64_t& offset)
+{
+    offset = 0;
+    if (!player) return false;
+
+    for (const auto& candidate : FindPlayerCandidates())
+    {
+        if (candidate.player != player) continue;
+        if (DetectEntityPosition(player, candidate.position, offset)) return true;
+    }
+
+    Log("AutoDetect: no candidate position matched LocalPlayer 0x%llX",
+        static_cast<unsigned long long>(player));
     return false;
 }
 
@@ -224,18 +224,26 @@ std::vector<AutoDetect::VelocityCandidate> AutoDetect::FindVelocityCandidates(
     std::vector<VelocityCandidate> results;
     if (!player) return results;
 
+    const bool havePosition = PlausiblePlayerPosition(excludePosition);
+
     // Entity velocity is normally within the first few hundred bytes of the object.
     for (uint64_t offset = 0; offset <= 0x600; offset += 4)
     {
         Vec3 value{};
         if (!ReadVec3(player + offset, value)) continue;
         if (!PlausibleVelocity(value)) continue;
-        if (SameVec3(value, excludePosition)) continue;
+
+        // Standing velocity is all-zero. Only exclude it when we actually know the player's
+        // position; otherwise we would discard every useful candidate before a jump.
+        if (MaxAbs(value) > 20.0f) continue; // position-like, not velocity
+        if (havePosition && SameVec3(value, excludePosition)) continue;
 
         results.push_back({ offset, value });
         if (results.size() >= 128) break;
     }
 
+    Log("AutoDetect: %zu velocity candidates (standing still = zero is expected)",
+        results.size());
     return results;
 }
 
@@ -277,8 +285,9 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
         if (!ReadVec3(session.player + session.candidates[i].offset, after)) continue;
 
         const Vec3& before = session.before[i];
-        const double score = std::fabs(after.x - before.x) +
-                             std::fabs(after.y - before.y) * 2.0 +
+        // A jump changes vertical velocity first and most, so weight Y heavily.
+        const double score = std::fabs(after.y - before.y) * 10.0 +
+                             std::fabs(after.x - before.x) +
                              std::fabs(after.z - before.z);
         scores.emplace_back(score, session.candidates[i].offset);
         if (score > bestScore)

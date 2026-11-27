@@ -19,16 +19,16 @@ This is experimental software. Read this before reporting an issue:
 - **Offsets are version-specific and not bundled.** Every game update changes them. A feature
   showing `MISSING` in the menu stays disabled until you fill in the matching `[Addresses]` /
   `[Offsets]` values or run **Auto-detect** successfully.
-- **Fly needs either `Offsets.EntityVelocity` or `Offsets.EntityPosition`.** Velocity mode is
-  preferred. If velocity cannot be detected, enabling Fly automatically tries the position
-  fallback (no jumping required); if that also fails it starts the velocity scan: **release
-  `Space`, then press and hold it once**. You can force the fallback manually with **Detect
-  position (fly)** in the Offsets tab. In position mode the mod re-asserts your Y after each
-  game tick: **hold `Space` to climb, release it to hover**. The configured `FlySpeed` magnitude
-  is used, so a negative value still climbs. If you still jump normally, the detected
-  `EntityPosition` is likely the wrong vector — compare the HUD coordinates with the game's
-  coordinate display and re-run detection with **Filter by coordinates** enabled. Check the `F9`
-  log for `AutoDetect:` lines, which include the top velocity candidates and the position offset.
+- **Fly uses `Offsets.EntityVelocity` by default.** When it is missing, enabling Fly starts a
+  velocity scan that works from any menu tab: **release `Space`, then press and hold it once**.
+  The scan now keeps zero-velocity candidates (the old filter discarded them) and weights vertical
+  change, so a normal jump identifies the offset. If velocity genuinely cannot be found,
+  **Detect position (fallback)** in the Offsets tab can set `EntityPosition`: the mod then
+  re-asserts your Y after each tick, **hold `Space` to climb, release it to hover**. The
+  configured `FlySpeed` magnitude is used, so a negative value still climbs. Position detection
+  no longer guesses by vector size — it must match a real player candidate or your entered
+  coordinates, avoiding bogus offsets such as `0x1A0` with `Y=0`. Check the `F9` log for
+  `AutoDetect:` lines if detection fails.
 - **ESP requires several values:** `LocalPlayer`, `Level` (or `Patterns.Level`),
   `LevelEntityList`, `EntityPosition`, `Camera` (or `Patterns.Camera`), and `ViewProj`. Missing ones
   are marked `MISSING` in the ESP tab, and the HUD shows `unavailable` for coordinates/speed.
@@ -204,14 +204,14 @@ Everything version-specific lives in `BedrockMenu.ini` (created next to the DLL 
 You can also edit all values in the in-game **Offsets** tab: use **Save & apply** to write the INI
 and reload them live (the tick hook is refreshed automatically). The same tab has an **Auto-detect**
 section: enable Minecraft's coordinate display, enter your current X/Y/Z, then click **One-click
-full setup**. It finds `LocalPlayer`, auto-detects `EntityPosition` independently of ESP success,
-applies every ESP offset it can (`Level`, `LevelEntityList`, `EntityListStride`, `Camera`, `ViewProj`,
-`MatrixTransposed`), and only prompts you to release then press `Space` once when neither velocity
-nor position could be found. Everything is applied automatically.
-The individual **Scan for LocalPlayer**, **Detect position (fly)**, **Detect all ESP offsets**, and
+full setup**. It finds `LocalPlayer`, auto-detects a matching `EntityPosition` independently of ESP
+success, applies every ESP offset it can (`Level`, `LevelEntityList`, `EntityListStride`, `Camera`,
+`ViewProj`, `MatrixTransposed`), and always prompts you to release then press `Space` once when
+`EntityVelocity` is still missing. Everything is applied automatically.
+The individual **Scan for LocalPlayer**, **Detect position (fallback)**, **Detect all ESP offsets**, and
 **Detect velocity** buttons remain available if you want to run the steps manually or pick a
-different candidate. Enabling Fly with both offsets missing tries position auto-detection first,
-then falls back to the velocity scan with a toast prompting you to release then hold `Space`.
+different candidate. Enabling Fly with `EntityVelocity` missing starts the velocity scan first;
+position detection is available as a fallback but is no longer guessed from arbitrary large vectors.
 All addresses are **RVAs relative to the Minecraft module base** — ASLR is handled automatically.
 If a value is `0`, that feature is simply disabled. The menu now shows green `OK` / red `MISSING`
 statuses for each requirement, so you can see exactly what is holding a feature back.

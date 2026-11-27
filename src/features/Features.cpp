@@ -62,7 +62,8 @@ void Features::ApplyTick()
         if (ReadValue(address, velocity))
         {
             // UI says "hold jump": only override vertical velocity while Space is down.
-            if (s.fly && jumpHeld) velocity.y = s.flySpeed;
+            // Use the magnitude so a negative configured speed still climbs.
+            if (s.fly && jumpHeld) velocity.y = std::fabs(s.flySpeed);
             velocity.x *= s.speedMultiplier;
             velocity.z *= s.speedMultiplier;
             if (std::isfinite(velocity.x) && std::isfinite(velocity.y) && std::isfinite(velocity.z))

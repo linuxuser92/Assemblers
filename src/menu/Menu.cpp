@@ -147,8 +147,7 @@ namespace
 
     void StartFlySetupIfNeeded()
     {
-        if (g_offsets.entityVelocity || g_offsets.entityPosition ||
-            s_velocitySession.active || s_velocityAutoPrompted)
+        if (g_offsets.entityVelocity || s_velocitySession.active || s_velocityAutoPrompted)
             return;
 
         uintptr_t player = 0;
@@ -168,19 +167,21 @@ namespace
             return;
         }
 
-        // Try the position fallback first: it needs no jumping and works with just
-        // LocalPlayer + EntityPosition.
+        // Velocity is the reliable fly mode. Use the player's auto-detected position only to
+        // exclude position vectors from the velocity candidate list.
+        Vec3 exclude = s_selectedPosition;
         uint64_t positionOffset = 0;
-        if (AutoDetect::DetectEntityPosition(player, s_selectedPosition, positionOffset))
+        if (AutoDetect::DetectEntityPositionFromPlayer(player, positionOffset))
         {
             s_offsetEditor.entityPosition = positionOffset;
             ApplyEditorOffsets();
-            NotifyColored(IM_COL32(110, 255, 140, 255), "Fly ready (position mode)");
-            return;
+            if (CanRead(reinterpret_cast<const void*>(player + positionOffset), sizeof(Vec3)))
+                std::memcpy(&exclude, reinterpret_cast<const void*>(player + positionOffset),
+                            sizeof(Vec3));
         }
 
         s_velocityAutoPrompted = true;
-        AutoDetect::StartVelocityScan(s_velocitySession, player, s_selectedPosition);
+        AutoDetect::StartVelocityScan(s_velocitySession, player, exclude);
         NotifyColored(IM_COL32(255, 200, 110, 255),
                       "Fly needs velocity - release then hold Space");
     }
@@ -761,13 +762,11 @@ namespace
                         }
                         ApplyEditorOffsets();
 
-                        const bool flyReady = s_offsetEditor.entityVelocity ||
-                                              s_offsetEditor.entityPosition;
-                        if (flyReady)
+                        if (s_offsetEditor.entityVelocity)
                         {
                             s_setupStatus = espOk
                                 ? "Done: fly + ESP offsets applied."
-                                : "Done: fly ready (position mode). ESP incomplete (see F9).";
+                                : "Done: fly ready. ESP incomplete (see F9).";
                             NotifyColored(espOk ? IM_COL32(110, 255, 140, 255)
                                                 : IM_COL32(255, 190, 100, 255),
                                           espOk ? "Full setup complete"
@@ -775,14 +774,16 @@ namespace
                         }
                         else
                         {
+                            // Velocity is the reliable fly mode. Position stays as a fallback
+                            // only if the velocity scan ultimately fails.
                             s_velocityAutoPrompted = true;
                             AutoDetect::StartVelocityScan(s_velocitySession,
                                                           candidate.player,
                                                           candidate.position);
-                            NotifyColored(IM_COL32(255, 190, 100, 255),
-                                          "ESP detection incomplete; see F9");
-                            s_setupStatus = "LocalPlayer applied; ESP incomplete (see F9). "
-                                            "Release then hold Space.";
+                            NotifyColored(IM_COL32(255, 200, 110, 255),
+                                          "Release then hold Space to detect velocity");
+                            s_setupStatus = "LocalPlayer applied. Release then hold Space "
+                                            "to finish fly detection.";
                         }
                     }
                 }
@@ -829,16 +830,16 @@ namespace
                                     sizeof(velocityPlayer));
                 }
 
-                if (ImGui::Button("Detect position (fly)") && velocityPlayer)
+                if (ImGui::Button("Detect position (fallback)") && velocityPlayer)
                 {
                     uint64_t positionOffset = 0;
-                    if (AutoDetect::DetectEntityPosition(velocityPlayer, s_selectedPosition,
-                                                         positionOffset))
+                    if (AutoDetect::DetectEntityPositionFromPlayer(velocityPlayer,
+                                                                  positionOffset))
                     {
                         s_offsetEditor.entityPosition = positionOffset;
                         ApplyEditorOffsets();
-                        NotifyColored(IM_COL32(110, 255, 140, 255),
-                                      "Fly ready (position mode)");
+                        NotifyColored(IM_COL32(255, 200, 110, 255),
+                                      "Position fallback set - velocity still preferred");
                     }
                     else
                     {
@@ -864,7 +865,7 @@ namespace
                     }
                 }
                 ImGui::SameLine();
-                ImGui::TextDisabled("Position/health need no Space press");
+                ImGui::TextDisabled("Velocity is preferred; position is only a fallback");
                 ImGui::Text("Velocity scan player: %s",
                             velocityPlayer ? "selected" : "none");
                 ImGui::Text("Status: %s", AutoDetect::VelocityScanStatus(s_velocitySession));
@@ -877,18 +878,6 @@ namespace
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel"))
                     AutoDetect::CancelVelocityScan(s_velocitySession);
-
-                uint64_t detectedVelocity = 0;
-                bool jumpHeld = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-                if (AutoDetect::UpdateVelocityScan(s_velocitySession, jumpHeld,
-                                                   detectedVelocity))
-                {
-                    s_offsetEditor.entityVelocity = detectedVelocity;
-                    s_velocityAutoPrompted = false;
-                    ApplyEditorOffsets();
-                    s_setupStatus = "Done: fly + ESP offsets applied.";
-                    NotifyColored(IM_COL32(110, 255, 140, 255), "Full setup complete");
-                }
 
                 ImGui::Separator();
                 ImGui::Button("Detect all ESP offsets");
@@ -1017,7 +1006,10 @@ void Menu::PollHotkeys()
         settings.fly = !settings.fly;
         Log("Hotkey: F1 -> fly %s", settings.fly ? "ON" : "OFF");
         Notify("Fly %s", settings.fly ? "ON" : "OFF");
-        if (settings.fly) StartFlySetupIfNeeded();
+        if (settings.fly)
+            StartFlySetupIfNeeded();
+        else
+            s_velocityAutoPrompted = false; // allow a fresh scan next time
         Config::Save();
     }
     f1Held = f1Down;
@@ -1076,6 +1068,37 @@ void Menu::PollHotkeys()
 void Menu::Draw()
 {
     Features::ApplyWorld();
+
+    // Velocity detection must keep running while the user holds Space, even if the Offsets
+    // tab is not open. Previously it only updated inside that tab and silently failed.
+    if (s_velocitySession.active)
+    {
+        uint64_t detectedVelocity = 0;
+        const bool jumpHeld = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+        if (AutoDetect::UpdateVelocityScan(s_velocitySession, jumpHeld, detectedVelocity))
+        {
+            s_offsetEditor.entityVelocity = detectedVelocity;
+            s_velocityAutoPrompted = false;
+            ApplyEditorOffsets();
+            s_setupStatus = "Fly ready (velocity mode). Hold Space to rise.";
+            NotifyColored(IM_COL32(110, 255, 140, 255), "Fly ready (velocity mode)");
+        }
+    }
+
+    static bool initialFlySetupDone = false;
+    if (!initialFlySetupDone)
+    {
+        initialFlySetupDone = true;
+        if (Config::g_settings.fly) StartFlySetupIfNeeded();
+    }
+
+    static bool lastFlyState = false;
+    if (lastFlyState && !Config::g_settings.fly)
+    {
+        s_velocityAutoPrompted = false;
+        AutoDetect::CancelVelocityScan(s_velocitySession);
+    }
+    lastFlyState = Config::g_settings.fly;
 
     // If no Tick RVA is configured, apply movement from the render loop instead.
     // GameHook owns this when installed, so never apply both in the same frame.

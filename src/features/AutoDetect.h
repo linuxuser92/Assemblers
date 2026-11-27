@@ -39,6 +39,10 @@ namespace AutoDetect
     // in which case the scan falls back to scoring stable, plausible position vectors.
     bool DetectEntityPosition(uintptr_t player, const Vec3& expected, uint64_t& offset);
 
+    // Matches the player position discovered by FindPlayerCandidates(), so the user does not
+    // have to type coordinates manually.
+    bool DetectEntityPositionFromPlayer(uintptr_t player, uint64_t& offset);
+
     // Finds a likely health float inside the player object (usually 20.0f at full health).
     bool DetectEntityHealth(uintptr_t player, uint64_t& offset);
 
