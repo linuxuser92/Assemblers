@@ -80,7 +80,21 @@ bool Game::ReadEntity(uintptr_t address, EntityInfo& out, Vec3 origin) const
     }
     else
     {
-        out.isPlayer = true;
+        // Without a PlayerVTable RVA we cannot identify players reliably, so classify
+        // everything as a generic entity. The ESP filters still work in this mode.
+        out.isPlayer = false;
+    }
+
+    // Health is optional; health bars are skipped when this offset is missing.
+    if (g_offsets.entityHealth)
+    {
+        float health = 0.0f;
+        if (Read(address + g_offsets.entityHealth, health) &&
+            std::isfinite(health) && health >= 0.0f && health <= 1000.0f)
+        {
+            out.hasHealth = true;
+            out.health = health;
+        }
     }
 
     // Name: follow a char* if possible, otherwise treat the offset as an inline buffer.

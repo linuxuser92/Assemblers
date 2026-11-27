@@ -50,7 +50,7 @@ This is experimental software. Read this before reporting an issue:
 
 | Tab | Feature | Notes |
 |-----|---------|-------|
-| ESP | Boxes, names, distance, snaplines, max distance | Reads entities from the level's entity list |
+| ESP | Boxes, names, distance, snaplines, health bars, player/entity filters, distance sorting, radar | Reads entities from the level's entity list |
 | Movement | Fly, speed multiplier, step height, no fall damage | Applied in a hooked tick, or from the render loop when no Tick RVA is set |
 | World | Fullbright, set time, coordinates / HUD display | Fullbright patches a gamma float if an address is configured |
 | Settings | Config save/load, unload DLL, live log console | `Insert` menu, `F1`-`F5` toggles, `F9` log, `End` unload, `Ctrl+Arrows` move |
@@ -142,6 +142,13 @@ The menu uses a two-column layout: a fixed navigation column on the left (ESP, M
 Offsets, Settings) and a scrollable content column on the right. Related controls are paired inside
 each section (for example requirement statuses, ESP toggles, and HUD settings).
 
+The **ESP** tab also has `Health bars`, `Show players`, `Show entities`, `Sort by distance`, and
+`Radar` controls. The radar appears in the bottom-right corner and plots nearby entities around
+your position; `Radar range` sets how many blocks it covers. Health bars require `EntityHealth`,
+which can be detected with **Detect health** in the Offsets tab or automatically during
+**One-click full setup**. Player/entity classification requires `PlayerVTable`; without it all
+entities are treated as generic entities.
+
 ### Hotkeys / debug console
 
 - `Insert` — toggle the menu
@@ -207,9 +214,10 @@ statuses for each requirement, so you can see exactly what is holding a feature 
 
 | Feature | Required INI values |
 | --- | --- |
-| Fly / speed | `Addresses.LocalPlayer`, `Offsets.EntityVelocity` |
+| Fly / speed | `Addresses.LocalPlayer`, `Offsets.EntityVelocity` (or `Offsets.EntityPosition` for fly only) |
 | No fall damage | `Addresses.LocalPlayer`, `Offsets.EntityOnGround` |
 | ESP | `Addresses.LocalPlayer`, `Addresses.Level` (or `Patterns.Level`), `Offsets.LevelEntityList`, `Offsets.EntityPosition`, `Patterns.Camera` (or `Addresses.Camera`), `Offsets.ViewProj` |
+| ESP health bars | `Offsets.EntityHealth` (optional — bars are hidden when missing) |
 | Fullbright | `Addresses.Gamma` |
 | Set time | `Addresses.Level` (or `Patterns.Level`), `Offsets.LevelTime` |
 
@@ -246,6 +254,7 @@ LevelTime=0x0
 EntityPosition=0x0
 EntityVelocity=0x0     ; Vec3, used by fly/speed
 EntityOnGround=0x0     ; bool, used by no-fall-damage
+EntityHealth=0x0       ; float, optional ESP health bars
 EntityName=0x0
 PlayerVTable=0x0       ; value of the player vtable pointer RVA (for filtering)
 EntityListStride=8

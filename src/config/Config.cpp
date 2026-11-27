@@ -42,6 +42,12 @@ namespace Config
         ReadBool(L"ESP", L"Names", s.espNames);
         ReadBool(L"ESP", L"Distance", s.espDistance);
         ReadBool(L"ESP", L"Snaplines", s.espSnaplines);
+        ReadBool(L"ESP", L"Health", s.espHealth);
+        ReadBool(L"ESP", L"FilterPlayers", s.espFilterPlayers);
+        ReadBool(L"ESP", L"FilterMobs", s.espFilterMobs);
+        ReadBool(L"ESP", L"SortByDistance", s.espSortByDistance);
+        ReadBool(L"ESP", L"Radar", s.espRadar);
+        ReadFloat(L"ESP", L"RadarRange", s.espRadarRange);
         ReadFloat(L"ESP", L"MaxDistance", s.espMaxDistance);
 
         ReadBool(L"Movement", L"Fly", s.fly);
@@ -81,6 +87,12 @@ namespace Config
         WriteValue(L"ESP", L"Names", s.espNames ? L"1" : L"0");
         WriteValue(L"ESP", L"Distance", s.espDistance ? L"1" : L"0");
         WriteValue(L"ESP", L"Snaplines", s.espSnaplines ? L"1" : L"0");
+        WriteValue(L"ESP", L"Health", s.espHealth ? L"1" : L"0");
+        WriteValue(L"ESP", L"FilterPlayers", s.espFilterPlayers ? L"1" : L"0");
+        WriteValue(L"ESP", L"FilterMobs", s.espFilterMobs ? L"1" : L"0");
+        WriteValue(L"ESP", L"SortByDistance", s.espSortByDistance ? L"1" : L"0");
+        WriteValue(L"ESP", L"Radar", s.espRadar ? L"1" : L"0");
+        WriteValue(L"ESP", L"RadarRange", FloatString(s.espRadarRange));
         WriteValue(L"ESP", L"MaxDistance", FloatString(s.espMaxDistance));
 
         WriteValue(L"Movement", L"Fly", s.fly ? L"1" : L"0");

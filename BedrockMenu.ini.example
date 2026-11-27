@@ -24,6 +24,7 @@ EntityListStride=8
 EntityPosition=0x0
 EntityVelocity=0x0
 EntityOnGround=0x0
+EntityHealth=0x0
 EntityName=0x0
 PlayerVTable=0x0
 ViewProj=0x0

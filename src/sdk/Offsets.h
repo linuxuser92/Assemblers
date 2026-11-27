@@ -23,6 +23,7 @@ struct Offsets
     uintptr_t entityPosition = 0; // Vec3 (3 x float)
     uintptr_t entityVelocity = 0; // Vec3 (3 x float)
     uintptr_t entityOnGround = 0; // bool
+    uintptr_t entityHealth = 0;   // float (usually 20.0 when full)
     uintptr_t entityName = 0;     // char* or std::string (best effort)
     uintptr_t playerVTable = 0;   // RVA of the player vtable, used for filtering
 
@@ -54,6 +55,7 @@ struct OffsetEditor
     uint64_t entityPosition = 0;
     uint64_t entityVelocity = 0;
     uint64_t entityOnGround = 0;
+    uint64_t entityHealth = 0;
     uint64_t entityName = 0;
     uint64_t playerVTable = 0;
     uint64_t viewProj = 0;

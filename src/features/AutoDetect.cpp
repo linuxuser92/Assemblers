@@ -16,6 +16,14 @@ namespace
         return true;
     }
 
+    template <typename T>
+    bool ReadValue(uintptr_t address, T& out)
+    {
+        if (!CanRead(reinterpret_cast<const void*>(address), sizeof(T))) return false;
+        std::memcpy(&out, reinterpret_cast<const void*>(address), sizeof(T));
+        return true;
+    }
+
     bool Finite(float value)
     {
         return std::isfinite(value);
@@ -167,6 +175,47 @@ bool AutoDetect::DetectEntityPosition(uintptr_t player, const Vec3& expected, ui
 
     Log("AutoDetect: no stable position vector found in the first 0x800 bytes of the player");
     return false;
+}
+
+bool AutoDetect::DetectEntityHealth(uintptr_t player, uint64_t& offset)
+{
+    offset = 0;
+    if (!player) return false;
+
+    double bestScore = -1.0;
+    uint64_t bestOffset = 0;
+
+    for (uint64_t candidate = 0; candidate <= 0x800; candidate += 4)
+    {
+        float first = 0.0f;
+        if (!ReadValue(player + candidate, first)) continue;
+        if (!Finite(first) || first <= 0.0f || first > 1000.0f) continue;
+
+        float second = 0.0f;
+        if (!ReadValue(player + candidate, second) || !Finite(second)) continue;
+        if (std::fabs(first - second) > 0.001f) continue;
+
+        // Bedrock entities normally have 20.0 health when full. Prefer values close to
+        // that, then fall back to any small stable positive float.
+        const double distanceFromFull = std::fabs(static_cast<double>(first) - 20.0);
+        const double score = 100.0 - distanceFromFull;
+        if (score > bestScore)
+        {
+            bestScore = score;
+            bestOffset = candidate;
+        }
+    }
+
+    if (!bestOffset)
+    {
+        Log("AutoDetect: no stable health-like float found in the player object");
+        return false;
+    }
+
+    offset = bestOffset;
+    Log("AutoDetect: health offset 0x%llX (score %.2f)",
+        static_cast<unsigned long long>(bestOffset), bestScore);
+    return true;
 }
 
 std::vector<AutoDetect::VelocityCandidate> AutoDetect::FindVelocityCandidates(

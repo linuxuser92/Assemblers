@@ -96,6 +96,7 @@ void OffsetEditor::LoadFromIni()
     entityPosition = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityPosition"));
     entityVelocity = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityVelocity"));
     entityOnGround = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityOnGround"));
+    entityHealth = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityHealth"));
     entityName = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityName"));
     playerVTable = static_cast<uint64_t>(ReadRva(L"Offsets", L"PlayerVTable"));
     viewProj = static_cast<uint64_t>(ReadRva(L"Offsets", L"ViewProj"));
@@ -120,6 +121,7 @@ void OffsetEditor::SaveToIni() const
     WriteRva(L"Offsets", L"EntityPosition", entityPosition);
     WriteRva(L"Offsets", L"EntityVelocity", entityVelocity);
     WriteRva(L"Offsets", L"EntityOnGround", entityOnGround);
+    WriteRva(L"Offsets", L"EntityHealth", entityHealth);
     WriteRva(L"Offsets", L"EntityName", entityName);
     WriteRva(L"Offsets", L"PlayerVTable", playerVTable);
     WriteRva(L"Offsets", L"ViewProj", viewProj);
@@ -152,6 +154,7 @@ void Offsets::Load()
     entityPosition = static_cast<uintptr_t>(editor.entityPosition);
     entityVelocity = static_cast<uintptr_t>(editor.entityVelocity);
     entityOnGround = static_cast<uintptr_t>(editor.entityOnGround);
+    entityHealth = static_cast<uintptr_t>(editor.entityHealth);
     entityName = static_cast<uintptr_t>(editor.entityName);
     playerVTable = static_cast<uintptr_t>(editor.playerVTable);
     viewProj = static_cast<uintptr_t>(editor.viewProj);

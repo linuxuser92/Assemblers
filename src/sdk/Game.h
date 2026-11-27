@@ -17,6 +17,8 @@ struct EntityInfo
     Vec3 position{};
     std::string name;
     bool isPlayer = false;
+    bool hasHealth = false;
+    float health = 0.0f;
     float distance = 0.0f;
 };
 

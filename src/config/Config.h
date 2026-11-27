@@ -13,6 +13,12 @@ namespace Config
         bool espNames = true;
         bool espDistance = true;
         bool espSnaplines = false;
+        bool espHealth = true;
+        bool espFilterPlayers = true;
+        bool espFilterMobs = true;
+        bool espSortByDistance = false;
+        bool espRadar = false;
+        float espRadarRange = 40.0f;
         float espMaxDistance = 80.0f;
         ImVec4 espColorPlayer = ImVec4(0.20f, 0.85f, 1.0f, 1.0f);
         ImVec4 espColorOther = ImVec4(1.0f, 0.45f, 0.30f, 1.0f);

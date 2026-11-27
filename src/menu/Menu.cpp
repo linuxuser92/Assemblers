@@ -354,10 +354,60 @@ namespace
         ImGui::End();
     }
 
+    void DrawRadar(ImDrawList* drawList, const ImVec2& viewport)
+    {
+        const auto& s = Config::g_settings;
+        const float radius = 86.0f;
+        const ImVec2 center(viewport.x - radius - 18.0f, viewport.y - radius - 18.0f);
+
+        drawList->AddCircleFilled(center, radius, IM_COL32(8, 12, 20, 190), 48);
+        drawList->AddCircle(center, radius, IM_COL32(110, 170, 255, 150), 48, 1.0f);
+        drawList->AddLine({ center.x - radius, center.y }, { center.x + radius, center.y },
+                          IM_COL32(110, 170, 255, 60), 1.0f);
+        drawList->AddLine({ center.x, center.y - radius }, { center.x, center.y + radius },
+                          IM_COL32(110, 170, 255, 60), 1.0f);
+
+        const Vec3 origin = g_game.LocalPosition();
+        const float range = (std::max)(1.0f, s.espRadarRange);
+        const float scale = radius / range;
+        for (const auto& entity : g_game.Entities(range))
+        {
+            if (entity.isPlayer ? !s.espFilterPlayers : !s.espFilterMobs) continue;
+
+            const float dx = (entity.position.x - origin.x) * scale;
+            const float dz = (entity.position.z - origin.z) * scale;
+            if (dx * dx + dz * dz > radius * radius) continue;
+
+            const ImU32 color = ImGui::ColorConvertFloat4ToU32(
+                entity.isPlayer ? s.espColorPlayer : s.espColorOther);
+            drawList->AddCircleFilled({ center.x + dx, center.y + dz },
+                                      entity.isPlayer ? 4.0f : 3.0f, color, 12);
+        }
+
+        drawList->AddCircleFilled(center, 3.0f, IM_COL32(255, 255, 255, 255), 12);
+        drawList->AddText({ center.x - 17.0f, center.y + radius + 4.0f },
+                          IM_COL32(200, 220, 255, 200), "RADAR");
+    }
+
     void DrawEsp(ImDrawList* drawList, const ImVec2& viewport)
     {
         const auto& s = Config::g_settings;
-        const auto entities = g_game.Entities(s.espMaxDistance);
+        auto entities = g_game.Entities(s.espMaxDistance);
+
+        entities.erase(
+            std::remove_if(entities.begin(), entities.end(), [&](const EntityInfo& entity) {
+                return entity.isPlayer ? !s.espFilterPlayers : !s.espFilterMobs;
+            }),
+            entities.end());
+
+        // Draw farther entities first so the nearest ones stay on top.
+        if (s.espSortByDistance)
+        {
+            std::sort(entities.begin(), entities.end(),
+                      [](const EntityInfo& a, const EntityInfo& b) {
+                          return a.distance > b.distance;
+                      });
+        }
 
         for (const auto& entity : entities)
         {
@@ -384,6 +434,22 @@ namespace
             if (s.espBoxes)
                 drawList->AddRect(boxMin, boxMax, color, 0.0f, 0, 1.5f);
 
+            if (s.espHealth && entity.hasHealth)
+            {
+                const float ratio = (std::max)(0.0f, (std::min)(1.0f, entity.health / 20.0f));
+                const ImVec2 barMin(boxMin.x, boxMax.y + 3.0f);
+                const ImVec2 barMax(boxMax.x, boxMax.y + 7.0f);
+                const ImU32 healthColor = ratio > 0.5f
+                    ? IM_COL32(90, 235, 120, 255)
+                    : (ratio > 0.25f ? IM_COL32(250, 200, 80, 255)
+                                     : IM_COL32(250, 90, 80, 255));
+                drawList->AddRectFilled(barMin, barMax, IM_COL32(0, 0, 0, 190), 1.0f);
+                drawList->AddRectFilled(barMin,
+                                        { barMin.x + (barMax.x - barMin.x) * ratio, barMax.y },
+                                        healthColor, 1.0f);
+                drawList->AddRect(barMin, barMax, IM_COL32(255, 255, 255, 90), 1.0f, 0, 1.0f);
+            }
+
             if (s.espSnaplines)
                 drawList->AddLine({ viewport.x * 0.5f, viewport.y }, feet, color, 1.0f);
 
@@ -408,6 +474,8 @@ namespace
                 drawList->AddText({ textPos.x + 2.0f, textPos.y + 1.0f }, color, label);
             }
         }
+
+        if (s.espRadar) DrawRadar(drawList, viewport);
     }
 
     void DrawMainWindow()
@@ -460,6 +528,8 @@ namespace
                 Requirement("Camera", g_offsets.cameraPointer != 0);
                 ImGui::NextColumn();
                 Requirement("ViewProj", g_offsets.viewProj != 0);
+                ImGui::NextColumn();
+                Requirement("Health (bars)", g_offsets.entityHealth != 0);
                 ImGui::Columns(1);
 
                 ImGui::Separator();
@@ -471,9 +541,21 @@ namespace
                 ImGui::Checkbox("Distance", &s.espDistance);
                 ImGui::NextColumn();
                 ImGui::Checkbox("Snaplines", &s.espSnaplines);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Health bars", &s.espHealth);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Show players", &s.espFilterPlayers);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Show entities", &s.espFilterMobs);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Sort by distance", &s.espSortByDistance);
+                ImGui::NextColumn();
+                ImGui::Checkbox("Radar", &s.espRadar);
                 ImGui::Columns(1);
 
                 ImGui::SliderFloat("Max distance", &s.espMaxDistance, 5.0f, 200.0f, "%.0f m");
+                if (s.espRadar)
+                    ImGui::SliderFloat("Radar range", &s.espRadarRange, 10.0f, 160.0f, "%.0f m");
 
                 ImGui::Columns(2, "##EspColors", false);
                 ImGui::ColorEdit4("Player color", reinterpret_cast<float*>(&s.espColorPlayer));
@@ -584,6 +666,7 @@ namespace
                 Hex("EntityPosition", s_offsetEditor.entityPosition);
                 Hex("EntityVelocity", s_offsetEditor.entityVelocity);
                 Hex("EntityOnGround", s_offsetEditor.entityOnGround);
+                Hex("EntityHealth", s_offsetEditor.entityHealth);
                 Hex("EntityName", s_offsetEditor.entityName);
                 Hex("PlayerVTable", s_offsetEditor.playerVTable);
                 Hex("ViewProj", s_offsetEditor.viewProj);
@@ -656,6 +739,10 @@ namespace
                         {
                             s_offsetEditor.entityPosition = detectedPosition;
                         }
+
+                        uint64_t detectedHealth = 0;
+                        if (AutoDetect::DetectEntityHealth(candidate.player, detectedHealth))
+                            s_offsetEditor.entityHealth = detectedHealth;
 
                         AutoDetect::EspDetection detected{};
                         const bool espOk = AutoDetect::DetectEsp(candidate,
@@ -760,7 +847,24 @@ namespace
                     }
                 }
                 ImGui::SameLine();
-                ImGui::TextDisabled("Position mode needs no Space press");
+                if (ImGui::Button("Detect health") && velocityPlayer)
+                {
+                    uint64_t healthOffset = 0;
+                    if (AutoDetect::DetectEntityHealth(velocityPlayer, healthOffset))
+                    {
+                        s_offsetEditor.entityHealth = healthOffset;
+                        ApplyEditorOffsets();
+                        NotifyColored(IM_COL32(110, 255, 140, 255),
+                                      "Health offset detected");
+                    }
+                    else
+                    {
+                        NotifyColored(IM_COL32(255, 120, 110, 255),
+                                      "Health detect failed - see F9");
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("Position/health need no Space press");
                 ImGui::Text("Velocity scan player: %s",
                             velocityPlayer ? "selected" : "none");
                 ImGui::Text("Status: %s", AutoDetect::VelocityScanStatus(s_velocitySession));
@@ -793,6 +897,10 @@ namespace
                     const ImVec2 viewport = g_game.Viewport();
                     AutoDetect::PlayerCandidate candidate{
                         s_offsetEditor.localPlayer, s_selectedPlayer, s_selectedPosition };
+                    uint64_t detectedHealth = 0;
+                    if (AutoDetect::DetectEntityHealth(s_selectedPlayer, detectedHealth))
+                        s_offsetEditor.entityHealth = detectedHealth;
+
                     AutoDetect::EspDetection detected{};
                     if (AutoDetect::DetectEsp(candidate, viewport.x, viewport.y, detected))
                     {
