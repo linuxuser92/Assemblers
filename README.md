@@ -11,13 +11,45 @@ directly through the game's command queue.
 
 ---
 
+## Known bugs & warnings
+
+This is experimental software. Read this before reporting an issue:
+
+- **Single-player only.** Never use it on Realms, servers, or anyone else's session.
+- **Offsets are version-specific and not bundled.** Every game update changes them. A feature
+  showing `MISSING` in the menu stays disabled until you fill in the matching `[Addresses]` /
+  `[Offsets]` values or run **Auto-detect** successfully.
+- **Fly requires `Offsets.EntityVelocity`.** While it is `0x0`, Fly will not move you. Enabling Fly
+  automatically starts the velocity scan: **release `Space`, then press and hold it once**. A toast
+  confirms success. If it fails, check the `F9` log for `AutoDetect:` / `AutoDetect ESP:` lines.
+- **ESP requires several values:** `LocalPlayer`, `Level` (or `Patterns.Level`),
+  `LevelEntityList`, `EntityPosition`, `Camera` (or `Patterns.Camera`), and `ViewProj`. Missing ones
+  are marked `MISSING` in the ESP tab, and the HUD shows `unavailable` for coordinates/speed.
+- **Auto-detect is a heuristic read-only scan.** False positives are possible; use **Filter by
+  coordinates** with your real X/Y/Z when you can. In Bedrock, coordinates are at
+  **Settings → World → Game → World options → Show coordinates** — not under Video.
+- **Do not re-enable WndProc subclassing or direct `io.MousePos` / `io.MouseDown` writes.** Both
+  caused `0xc0000409` crashes in `ucrtbase.dll` during live testing. Mouse input uses Win32 queries
+  plus `AddMousePosEvent` / `AddMouseButtonEvent` instead.
+- **If crashes ever return after resize/maximize**, set `DisableD3DHooks=1` in `BedrockMenu.ini` to
+  shut the overlay off immediately. Renderer must never retain `ComPtr` references to swap-chain
+  back buffers.
+- **Config flag names can look inverted:** `DisableD3DHooks=1` means hooks are off;
+  `DisableImGuiInput=1` means keyboard-only mode.
+- **`ShowConsole=0` is the default** because `AllocConsole()` is unstable in the UWP process. Use
+  `F9` for the in-game log console instead.
+- **Synthetic keystrokes/clicks from another process cannot control the game.** Hotkeys, the
+  velocity scan, and menu input need real physical input.
+
+---
+
 ## Features
 
 | Tab | Feature | Notes |
 |-----|---------|-------|
 | ESP | Boxes, names, distance, snaplines, max distance | Reads entities from the level's entity list |
-| Movement | Fly, speed multiplier, step height, no fall damage | Applied in a hooked game tick; requires a tick address |
-| World | Fullbright, set time,Coords/HUD display | Fullbright patches a gamma float if an address is configured |
+| Movement | Fly, speed multiplier, step height, no fall damage | Applied in a hooked tick, or from the render loop when no Tick RVA is set |
+| World | Fullbright, set time, coordinates / HUD display | Fullbright patches a gamma float if an address is configured |
 | Settings | Config save/load, unload DLL, live log console | `Insert` menu, `F1`-`F5` toggles, `F9` log, `End` unload, `Ctrl+Arrows` move |
 
 ---
