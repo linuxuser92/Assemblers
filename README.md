@@ -1,4 +1,4 @@
-# BedrockMenu — C++ DLL (MinHook + Dear ImGui + D3D12)
+# Assemblers: Minecraft Mod menu for debug overlay
 
 A **single-player-only** mod menu / debug overlay for **Minecraft Bedrock Edition (Windows)**.
 It hooks D3D12 through MinHook, renders its UI with Dear ImGui (D3D12 backend), and draws ESP
