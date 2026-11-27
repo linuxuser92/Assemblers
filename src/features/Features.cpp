@@ -47,6 +47,7 @@ void Features::ApplyTick()
     if (!player) return;
 
     const bool jumpHeld = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+
     if ((s.fly || s.speedMultiplier != 1.0f) && g_offsets.entityVelocity)
     {
         Vec3 velocity{};
@@ -59,6 +60,27 @@ void Features::ApplyTick()
             velocity.z *= s.speedMultiplier;
             if (std::isfinite(velocity.x) && std::isfinite(velocity.y) && std::isfinite(velocity.z))
                 WriteValue(address, velocity);
+        }
+    }
+    else if (s.fly && jumpHeld && g_offsets.entityPosition)
+    {
+        // Fallback for worlds where the velocity field could not be detected.
+        // Velocity mode is preferred; position mode only needs LocalPlayer + EntityPosition.
+        static ULONGLONG lastTick = 0;
+        const ULONGLONG now = GetTickCount64();
+        float delta = lastTick ? static_cast<float>(now - lastTick) / 1000.0f
+                               : 1.0f / 60.0f;
+        lastTick = now;
+        if (delta > 0.05f) delta = 0.05f; // clamp after a stall / tab switch
+
+        Vec3 position{};
+        const uintptr_t address = player + g_offsets.entityPosition;
+        if (ReadValue(address, position))
+        {
+            // flySpeed is expressed like Minecraft velocity (blocks per tick), so multiply
+            // by 20 to convert it to blocks per second for this time-based write.
+            position.y += s.flySpeed * delta * 20.0f;
+            if (std::isfinite(position.y)) WriteValue(address, position);
         }
     }
 

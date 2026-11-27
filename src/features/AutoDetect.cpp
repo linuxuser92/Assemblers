@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <unordered_set>
+#include <utility>
 
 namespace
 {
@@ -97,6 +99,76 @@ std::vector<AutoDetect::PlayerCandidate> AutoDetect::FindPlayerCandidates()
     return results;
 }
 
+bool AutoDetect::DetectEntityPosition(uintptr_t player, const Vec3& expected, uint64_t& offset)
+{
+    offset = 0;
+    if (!player) return false;
+
+    const bool haveExpected = PlausiblePlayerPosition(expected);
+
+    // Pass 1: match the known coordinates closely. This is the most reliable path when the
+    // user has Show Coordinates enabled and typed the current X/Y/Z into the offset tab.
+    // Pass 2: otherwise pick a stable, plausible position vector with a large magnitude,
+    // which distinguishes it from near-zero velocity vectors.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        if (pass == 1 && haveExpected)
+        {
+            Log("AutoDetect: position did not match coordinates; using stable-vector fallback");
+        }
+
+        double bestScore = -1.0;
+        uint64_t bestOffset = 0;
+
+        for (uint64_t candidate = 0; candidate <= 0x800; candidate += 4)
+        {
+            Vec3 first{};
+            if (!ReadVec3(player + candidate, first)) continue;
+            if (!PlausiblePlayerPosition(first)) continue;
+
+            // Require two identical reads so transient/uninitialized floats are skipped.
+            Vec3 second{};
+            if (!ReadVec3(player + candidate, second) || !SameVec3(first, second)) continue;
+
+            double score = 0.0;
+            if (pass == 0 && haveExpected)
+            {
+                const double dx = first.x - expected.x;
+                const double dy = first.y - expected.y;
+                const double dz = first.z - expected.z;
+                const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (distance > 8.0) continue; // coordinates can tick between scan and apply
+                score = 1000.0 - distance;
+            }
+            else
+            {
+                const double magnitude = (std::max)({ std::fabs(first.x),
+                                                      std::fabs(first.y),
+                                                      std::fabs(first.z) });
+                if (magnitude < 2.0) continue; // velocity-like values are usually near zero
+                score = magnitude;
+            }
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestOffset = candidate;
+            }
+        }
+
+        if (bestOffset)
+        {
+            offset = bestOffset;
+            Log("AutoDetect: position offset 0x%llX (pass %d, score %.2f)",
+                static_cast<unsigned long long>(bestOffset), pass + 1, bestScore);
+            return true;
+        }
+    }
+
+    Log("AutoDetect: no stable position vector found in the first 0x800 bytes of the player");
+    return false;
+}
+
 std::vector<AutoDetect::VelocityCandidate> AutoDetect::FindVelocityCandidates(
     uintptr_t player, const Vec3& excludePosition)
 {
@@ -148,6 +220,7 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
 
     double bestScore = 0.0;
     uint64_t bestOffset = 0;
+    std::vector<std::pair<double, uint64_t>> scores;
 
     for (size_t i = 0; i < session.candidates.size(); ++i)
     {
@@ -158,6 +231,7 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
         const double score = std::fabs(after.x - before.x) +
                              std::fabs(after.y - before.y) * 2.0 +
                              std::fabs(after.z - before.z);
+        scores.emplace_back(score, session.candidates[i].offset);
         if (score > bestScore)
         {
             bestScore = score;
@@ -174,7 +248,19 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
         return true;
     }
 
-    Log("AutoDetect: no velocity value changed; try again while moving/jumping");
+    std::sort(scores.begin(), scores.end(), [](const auto& a, const auto& b) {
+        return a.first > b.first;
+    });
+    char detail[192] = {};
+    std::snprintf(detail, sizeof(detail), "top: 0x%llX=%.3f 0x%llX=%.3f 0x%llX=%.3f",
+                  static_cast<unsigned long long>(scores.size() > 0 ? scores[0].second : 0),
+                  scores.size() > 0 ? scores[0].first : 0.0,
+                  static_cast<unsigned long long>(scores.size() > 1 ? scores[1].second : 0),
+                  scores.size() > 1 ? scores[1].first : 0.0,
+                  static_cast<unsigned long long>(scores.size() > 2 ? scores[2].second : 0),
+                  scores.size() > 2 ? scores[2].first : 0.0);
+    Log("AutoDetect: no velocity value changed (%zu candidates); %s; try moving/jumping",
+        session.candidates.size(), detail);
     return false;
 }
 

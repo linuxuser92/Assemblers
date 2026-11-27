@@ -145,9 +145,10 @@ namespace
         return ImGui::ColorConvertFloat4ToU32(value);
     }
 
-    void StartVelocityIfNeeded()
+    void StartFlySetupIfNeeded()
     {
-        if (g_offsets.entityVelocity || s_velocitySession.active || s_velocityAutoPrompted)
+        if (g_offsets.entityVelocity || g_offsets.entityPosition ||
+            s_velocitySession.active || s_velocityAutoPrompted)
             return;
 
         uintptr_t player = 0;
@@ -164,6 +165,17 @@ namespace
         {
             NotifyColored(IM_COL32(255, 120, 110, 255),
                           "Fly: LocalPlayer is missing - run auto-setup first");
+            return;
+        }
+
+        // Try the position fallback first: it needs no jumping and works with just
+        // LocalPlayer + EntityPosition.
+        uint64_t positionOffset = 0;
+        if (AutoDetect::DetectEntityPosition(player, s_selectedPosition, positionOffset))
+        {
+            s_offsetEditor.entityPosition = positionOffset;
+            ApplyEditorOffsets();
+            NotifyColored(IM_COL32(110, 255, 140, 255), "Fly ready (position mode)");
             return;
         }
 
@@ -477,6 +489,8 @@ namespace
                 ImGui::NextColumn();
                 Requirement("Velocity offset", g_offsets.entityVelocity != 0);
                 ImGui::NextColumn();
+                Requirement("Position (fly fallback)", g_offsets.entityPosition != 0);
+                ImGui::NextColumn();
                 Requirement("OnGround (no fall)", g_offsets.entityOnGround != 0);
                 ImGui::NextColumn();
                 if (GameHook::IsInstalled())
@@ -488,7 +502,7 @@ namespace
 
                 ImGui::Separator();
                 ImGui::Checkbox("Fly (hold jump)", &s.fly);
-                if (s.fly) StartVelocityIfNeeded();
+                if (s.fly) StartFlySetupIfNeeded();
                 ImGui::Columns(2, "##MoveOptions", false);
                 ImGui::SliderFloat("Fly speed", &s.flySpeed, -1.0f, 2.0f, "%.2f");
                 ImGui::NextColumn();
@@ -499,10 +513,15 @@ namespace
                 ImGui::Checkbox("No fall damage", &s.noFallDamage);
                 ImGui::Columns(1);
 
-                const bool moveReady = g_offsets.localPlayerPointer && g_offsets.entityVelocity;
-                if (!moveReady && (s.fly || s.speedMultiplier != 1.0f))
+                const bool flyReady = g_offsets.localPlayerPointer &&
+                                      (g_offsets.entityVelocity || g_offsets.entityPosition);
+                const bool speedReady = g_offsets.localPlayerPointer && g_offsets.entityVelocity;
+                if (s.fly && !flyReady)
                     ImGui::TextColored(ImVec4(1.0f, 0.40f, 0.35f, 1.0f),
-                        "Movement inactive: set LocalPlayer + EntityVelocity in BedrockMenu.ini.");
+                        "Fly inactive: needs LocalPlayer + Velocity, or LocalPlayer + Position.");
+                if (s.speedMultiplier != 1.0f && !speedReady)
+                    ImGui::TextColored(ImVec4(1.0f, 0.40f, 0.35f, 1.0f),
+                        "Speed multiplier needs LocalPlayer + EntityVelocity.");
             }
 
             if (s_menuSection == MenuSection::World)
@@ -630,13 +649,22 @@ namespace
                     else
                     {
                         const ImVec2 viewport = g_game.Viewport();
+                        uint64_t detectedPosition = 0;
+                        if (AutoDetect::DetectEntityPosition(candidate.player,
+                                                             candidate.position,
+                                                             detectedPosition))
+                        {
+                            s_offsetEditor.entityPosition = detectedPosition;
+                        }
+
                         AutoDetect::EspDetection detected{};
                         const bool espOk = AutoDetect::DetectEsp(candidate,
                                                                 viewport.x, viewport.y,
                                                                 detected);
                         if (espOk)
                         {
-                            s_offsetEditor.entityPosition = detected.entityPosition;
+                            if (detected.entityPosition)
+                                s_offsetEditor.entityPosition = detected.entityPosition;
                             s_offsetEditor.level = detected.level;
                             s_offsetEditor.levelEntityList = detected.levelEntityList;
                             s_offsetEditor.entityListStride = detected.entityListStride;
@@ -646,11 +674,17 @@ namespace
                         }
                         ApplyEditorOffsets();
 
-                        if (s_offsetEditor.entityVelocity)
+                        const bool flyReady = s_offsetEditor.entityVelocity ||
+                                              s_offsetEditor.entityPosition;
+                        if (flyReady)
                         {
-                            s_setupStatus = "Done: fly + ESP offsets applied.";
-                            NotifyColored(IM_COL32(110, 255, 140, 255),
-                                          "Full setup complete");
+                            s_setupStatus = espOk
+                                ? "Done: fly + ESP offsets applied."
+                                : "Done: fly ready (position mode). ESP incomplete (see F9).";
+                            NotifyColored(espOk ? IM_COL32(110, 255, 140, 255)
+                                                : IM_COL32(255, 190, 100, 255),
+                                          espOk ? "Full setup complete"
+                                                : "Fly ready; ESP incomplete");
                         }
                         else
                         {
@@ -658,12 +692,10 @@ namespace
                             AutoDetect::StartVelocityScan(s_velocitySession,
                                                           candidate.player,
                                                           candidate.position);
-                            if (!espOk)
-                                NotifyColored(IM_COL32(255, 190, 100, 255),
-                                              "ESP detection incomplete; see F9");
-                            s_setupStatus = espOk
-                                ? "ESP applied. Release then hold Space to detect velocity..."
-                                : "LocalPlayer applied; ESP incomplete (see F9). Release then hold Space.";
+                            NotifyColored(IM_COL32(255, 190, 100, 255),
+                                          "ESP detection incomplete; see F9");
+                            s_setupStatus = "LocalPlayer applied; ESP incomplete (see F9). "
+                                            "Release then hold Space.";
                         }
                     }
                 }
@@ -710,6 +742,25 @@ namespace
                                     sizeof(velocityPlayer));
                 }
 
+                if (ImGui::Button("Detect position (fly)") && velocityPlayer)
+                {
+                    uint64_t positionOffset = 0;
+                    if (AutoDetect::DetectEntityPosition(velocityPlayer, s_selectedPosition,
+                                                         positionOffset))
+                    {
+                        s_offsetEditor.entityPosition = positionOffset;
+                        ApplyEditorOffsets();
+                        NotifyColored(IM_COL32(110, 255, 140, 255),
+                                      "Fly ready (position mode)");
+                    }
+                    else
+                    {
+                        NotifyColored(IM_COL32(255, 120, 110, 255),
+                                      "Position detect failed - see F9");
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("Position mode needs no Space press");
                 ImGui::Text("Velocity scan player: %s",
                             velocityPlayer ? "selected" : "none");
                 ImGui::Text("Status: %s", AutoDetect::VelocityScanStatus(s_velocitySession));
@@ -858,7 +909,7 @@ void Menu::PollHotkeys()
         settings.fly = !settings.fly;
         Log("Hotkey: F1 -> fly %s", settings.fly ? "ON" : "OFF");
         Notify("Fly %s", settings.fly ? "ON" : "OFF");
-        if (settings.fly) StartVelocityIfNeeded();
+        if (settings.fly) StartFlySetupIfNeeded();
         Config::Save();
     }
     f1Held = f1Down;

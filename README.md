@@ -19,9 +19,12 @@ This is experimental software. Read this before reporting an issue:
 - **Offsets are version-specific and not bundled.** Every game update changes them. A feature
   showing `MISSING` in the menu stays disabled until you fill in the matching `[Addresses]` /
   `[Offsets]` values or run **Auto-detect** successfully.
-- **Fly requires `Offsets.EntityVelocity`.** While it is `0x0`, Fly will not move you. Enabling Fly
-  automatically starts the velocity scan: **release `Space`, then press and hold it once**. A toast
-  confirms success. If it fails, check the `F9` log for `AutoDetect:` / `AutoDetect ESP:` lines.
+- **Fly needs either `Offsets.EntityVelocity` or `Offsets.EntityPosition`.** Velocity mode is
+  preferred. If velocity cannot be detected, enabling Fly automatically tries the position
+  fallback (no jumping required); if that also fails it starts the velocity scan: **release
+  `Space`, then press and hold it once**. You can force the fallback manually with **Detect
+  position (fly)** in the Offsets tab. A toast confirms success; if it fails, check the `F9` log
+  for `AutoDetect:` lines, which now include the top velocity candidates.
 - **ESP requires several values:** `LocalPlayer`, `Level` (or `Patterns.Level`),
   `LevelEntityList`, `EntityPosition`, `Camera` (or `Patterns.Camera`), and `ViewProj`. Missing ones
   are marked `MISSING` in the ESP tab, and the HUD shows `unavailable` for coordinates/speed.
@@ -190,13 +193,14 @@ Everything version-specific lives in `BedrockMenu.ini` (created next to the DLL 
 You can also edit all values in the in-game **Offsets** tab: use **Save & apply** to write the INI
 and reload them live (the tick hook is refreshed automatically). The same tab has an **Auto-detect**
 section: enable Minecraft's coordinate display, enter your current X/Y/Z, then click **One-click
-full setup**. It finds `LocalPlayer`, applies every ESP offset (`EntityPosition`, `Level`,
-`LevelEntityList`, `EntityListStride`, `Camera`, `ViewProj`, `MatrixTransposed`), and prompts you to
-release then press `Space` once to detect `EntityVelocity`. Everything is applied automatically.
-The individual **Scan for LocalPlayer**, **Detect all ESP offsets**, and **Detect velocity** buttons
-remain available if you want to run the steps manually or pick a different candidate. Enabling Fly
-while `EntityVelocity` is missing also starts the velocity scan automatically and shows a toast
-prompting you to release then hold `Space`.
+full setup**. It finds `LocalPlayer`, auto-detects `EntityPosition` independently of ESP success,
+applies every ESP offset it can (`Level`, `LevelEntityList`, `EntityListStride`, `Camera`, `ViewProj`,
+`MatrixTransposed`), and only prompts you to release then press `Space` once when neither velocity
+nor position could be found. Everything is applied automatically.
+The individual **Scan for LocalPlayer**, **Detect position (fly)**, **Detect all ESP offsets**, and
+**Detect velocity** buttons remain available if you want to run the steps manually or pick a
+different candidate. Enabling Fly with both offsets missing tries position auto-detection first,
+then falls back to the velocity scan with a toast prompting you to release then hold `Space`.
 All addresses are **RVAs relative to the Minecraft module base** — ASLR is handled automatically.
 If a value is `0`, that feature is simply disabled. The menu now shows green `OK` / red `MISSING`
 statuses for each requirement, so you can see exactly what is holding a feature back.

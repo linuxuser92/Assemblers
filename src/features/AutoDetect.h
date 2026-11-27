@@ -35,6 +35,10 @@ namespace AutoDetect
     std::vector<VelocityCandidate> FindVelocityCandidates(uintptr_t player,
                                                           const Vec3& excludePosition);
 
+    // Finds the entity position offset inside the player object. `expected` may be all zero,
+    // in which case the scan falls back to scoring stable, plausible position vectors.
+    bool DetectEntityPosition(uintptr_t player, const Vec3& expected, uint64_t& offset);
+
     void StartVelocityScan(VelocitySession& session, uintptr_t player,
                            const Vec3& excludePosition);
 
