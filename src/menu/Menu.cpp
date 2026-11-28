@@ -29,6 +29,8 @@ static bool s_offsetEditorLoaded = false;
 static std::vector<AutoDetect::PlayerCandidate> s_playerCandidates;
 static AutoDetect::VelocitySession s_velocitySession;
 static bool s_velocityAutoPrompted = false;
+static AutoDetect::BoolSnapshot s_survivalSnapshot;
+static std::vector<uint64_t> s_canFlyCandidates;
 static uintptr_t s_selectedPlayer = 0;
 static Vec3 s_selectedPosition{};
 static bool s_filterByCoordinates = false;
@@ -129,7 +131,8 @@ namespace
 
     void StartFlySetupIfNeeded(bool quiet = false)
     {
-        if (g_offsets.entityVelocity || s_velocitySession.active || s_velocityAutoPrompted)
+        if (g_offsets.entityCanFly || g_offsets.entityVelocity ||
+            s_velocitySession.active || s_velocityAutoPrompted)
             return;
 
         uintptr_t player = 0;
@@ -562,6 +565,8 @@ namespace
                 ImGui::Columns(2, "##MoveRequirements", false);
                 Requirement("LocalPlayer", g_offsets.localPlayerPointer != 0);
                 ImGui::NextColumn();
+                Requirement("CanFly (no velocity)", g_offsets.entityCanFly != 0);
+                ImGui::NextColumn();
                 Requirement("Velocity offset", g_offsets.entityVelocity != 0);
                 ImGui::NextColumn();
                 Requirement("Position (fly fallback)", g_offsets.entityPosition != 0);
@@ -589,11 +594,15 @@ namespace
                 ImGui::Columns(1);
 
                 const bool flyReady = g_offsets.localPlayerPointer &&
-                                      (g_offsets.entityVelocity || g_offsets.entityPosition);
+                                      (g_offsets.entityCanFly || g_offsets.entityVelocity ||
+                                       g_offsets.entityPosition);
                 const bool speedReady = g_offsets.localPlayerPointer && g_offsets.entityVelocity;
+                if (s.fly && flyReady && g_offsets.entityCanFly)
+                    ImGui::TextColored(ImVec4(0.30f, 1.0f, 0.40f, 1.0f),
+                        "Fly ready (CanFly mode). No velocity needed - hold Space to rise.");
                 if (s.fly && !flyReady)
                     ImGui::TextColored(ImVec4(1.0f, 0.40f, 0.35f, 1.0f),
-                        "Fly inactive: needs LocalPlayer + Velocity, or LocalPlayer + Position.");
+                        "Fly inactive: needs CanFly, or Velocity, or Position offset.");
                 if (s.speedMultiplier != 1.0f && !speedReady)
                     ImGui::TextColored(ImVec4(1.0f, 0.40f, 0.35f, 1.0f),
                         "Speed multiplier needs LocalPlayer + EntityVelocity.");
@@ -674,6 +683,7 @@ namespace
                 Hex("LevelTime", s_offsetEditor.levelTime);
                 Hex("EntityPosition", s_offsetEditor.entityPosition);
                 Hex("EntityVelocity", s_offsetEditor.entityVelocity);
+                Hex("CanFly", s_offsetEditor.entityCanFly);
                 Hex("EntityOnGround", s_offsetEditor.entityOnGround);
                 Hex("EntityHealth", s_offsetEditor.entityHealth);
                 Hex("EntityName", s_offsetEditor.entityName);
@@ -770,7 +780,17 @@ namespace
                         }
                         ApplyEditorOffsets();
 
-                        if (s_offsetEditor.entityVelocity)
+                        if (s_offsetEditor.entityCanFly)
+                        {
+                            s_setupStatus = espOk
+                                ? "Done: CanFly mode active; ESP offsets applied."
+                                : "Done: fly ready (CanFly). ESP incomplete (see F9).";
+                            NotifyColored(espOk ? IM_COL32(110, 255, 140, 255)
+                                                : IM_COL32(255, 190, 100, 255),
+                                          espOk ? "Full setup complete"
+                                                : "Fly ready (CanFly); ESP incomplete");
+                        }
+                        else if (s_offsetEditor.entityVelocity)
                         {
                             s_setupStatus = espOk
                                 ? "Done: fly + ESP offsets applied."
@@ -886,6 +906,92 @@ namespace
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel"))
                     AutoDetect::CancelVelocityScan(s_velocitySession);
+
+                ImGui::Separator();
+                ImGui::Text("Fly without velocity (CanFly)");
+                ImGui::TextWrapped(
+                    "Stay in Survival and capture, switch to Creative and capture, then switch "
+                    "back to Survival and choose a candidate. This scan only reads memory.");
+                const uint64_t snapshotSize = AutoDetect::RecommendedCanFlySnapshotSize();
+                if (ImGui::Button("Capture Survival") && velocityPlayer)
+                {
+                    s_canFlyCandidates.clear();
+                    if (AutoDetect::CaptureBoolSnapshot(velocityPlayer, snapshotSize,
+                                                        s_survivalSnapshot))
+                    {
+                        s_setupStatus = "Survival captured. Switch to Creative, then capture again.";
+                        NotifyColored(IM_COL32(255, 200, 110, 255),
+                                      "Survival captured - switch to Creative");
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Capture Creative") && velocityPlayer)
+                {
+                    AutoDetect::BoolSnapshot creative;
+                    if (!AutoDetect::CaptureBoolSnapshot(velocityPlayer, snapshotSize, creative))
+                    {
+                        NotifyColored(IM_COL32(255, 120, 110, 255),
+                                      "CanFly capture failed - see F9");
+                    }
+                    else
+                    {
+                        const std::vector<uint64_t> excluded = {
+                            s_offsetEditor.entityPosition, s_offsetEditor.entityVelocity,
+                            s_offsetEditor.entityCanFly, s_offsetEditor.entityOnGround,
+                            s_offsetEditor.entityHealth
+                        };
+                        s_canFlyCandidates = AutoDetect::FindCanFlyCandidates(
+                            s_survivalSnapshot, creative, excluded);
+                        if (s_canFlyCandidates.empty())
+                        {
+                            s_setupStatus = "No CanFly candidates. Recapture in Survival then Creative.";
+                            NotifyColored(IM_COL32(255, 120, 110, 255),
+                                          "No CanFly candidates - see F9");
+                        }
+                        else
+                        {
+                            s_setupStatus = "CanFly candidates ready. Switch back to Survival and pick one.";
+                            NotifyColored(IM_COL32(110, 255, 140, 255),
+                                          "%zu CanFly candidates found", s_canFlyCandidates.size());
+                        }
+                    }
+                }
+
+                if (!s_canFlyCandidates.empty())
+                {
+                    ImGui::Text("Candidates (0 in Survival -> 1 in Creative):");
+                    const size_t shownCanFly = (std::min)(s_canFlyCandidates.size(), size_t(12));
+                    for (size_t i = 0; i < shownCanFly; ++i)
+                    {
+                        ImGui::PushID(static_cast<int>(i + 1000));
+                        ImGui::BulletText("0x%llX",
+                                          static_cast<unsigned long long>(s_canFlyCandidates[i]));
+                        ImGui::SameLine();
+                        if (ImGui::Button("Use"))
+                        {
+                            s_offsetEditor.entityCanFly = s_canFlyCandidates[i];
+                            s_offsetEditor.entityVelocity = 0; // velocity is no longer needed
+                            ApplyEditorOffsets();
+                            s_setupStatus = "CanFly applied. Fly works without velocity now.";
+                            NotifyColored(IM_COL32(110, 255, 140, 255),
+                                          "CanFly set - no velocity needed");
+                        }
+                        ImGui::PopID();
+                    }
+                    if (ImGui::Button("Use first candidate"))
+                    {
+                        s_offsetEditor.entityCanFly = s_canFlyCandidates.front();
+                        s_offsetEditor.entityVelocity = 0;
+                        ApplyEditorOffsets();
+                        s_setupStatus = "CanFly applied. Fly works without velocity now.";
+                        NotifyColored(IM_COL32(110, 255, 140, 255),
+                                      "CanFly set - no velocity needed");
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("No CanFly candidates yet.");
+                }
 
                 ImGui::Separator();
                 ImGui::Button("Detect all ESP offsets");
@@ -1120,7 +1226,7 @@ void Menu::Draw()
     // Retry quietly until the player/ world is ready. A fresh launch can otherwise produce an
     // empty 0-candidate scan and waste the one-time Space prompt.
     static ULONGLONG lastFlySetupRetry = 0;
-    if (Config::g_settings.fly && !g_offsets.entityVelocity &&
+    if (Config::g_settings.fly && !g_offsets.entityCanFly && !g_offsets.entityVelocity &&
         !s_velocitySession.active && !s_velocityAutoPrompted)
     {
         const ULONGLONG now = GetTickCount64();

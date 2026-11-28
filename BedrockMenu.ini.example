@@ -23,6 +23,8 @@ LevelTime=0x0
 EntityListStride=8
 EntityPosition=0x0
 EntityVelocity=0x0
+; Vanilla/creative fly flag. Set this to fly without EntityVelocity or EntityPosition.
+CanFly=0x0
 EntityOnGround=0x0
 EntityHealth=0x0
 EntityName=0x0

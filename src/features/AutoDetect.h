@@ -30,6 +30,15 @@ namespace AutoDetect
         std::vector<Vec3> before;
     };
 
+    // Byte snapshot of the player object. 0xFF marks an unreadable byte. Used by the
+    // guided CanFly detection: capture Survival, switch to Creative, capture again.
+    struct BoolSnapshot
+    {
+        uintptr_t player = 0;
+        uint64_t size = 0;
+        std::vector<uint8_t> values;
+    };
+
     // Read-only scans. Safe to call from the render thread on a button click.
     std::vector<PlayerCandidate> FindPlayerCandidates();
     std::vector<VelocityCandidate> FindVelocityCandidates(uintptr_t player,
@@ -45,6 +54,15 @@ namespace AutoDetect
 
     // Finds a likely health float inside the player object (usually 20.0f at full health).
     bool DetectEntityHealth(uintptr_t player, uint64_t& offset);
+
+    // Guided, read-only CanFly detection. Capture the player in Survival, switch to
+    // Creative, capture again, then compare. Excluded offsets are skipped with neighbors.
+    uint64_t RecommendedCanFlySnapshotSize();
+    bool CaptureBoolSnapshot(uintptr_t player, uint64_t size, BoolSnapshot& out);
+    std::vector<uint64_t> FindCanFlyCandidates(const BoolSnapshot& survival,
+                                               const BoolSnapshot& creative,
+                                               const std::vector<uint64_t>& excluded,
+                                               size_t limit = 24);
 
     void StartVelocityScan(VelocitySession& session, uintptr_t player,
                            const Vec3& excludePosition);

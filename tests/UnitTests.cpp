@@ -1,4 +1,5 @@
 #include "common.h"
+#include "features/AutoDetect.h"
 #include "utils/Memory.h"
 
 #include <iostream>
@@ -39,6 +40,25 @@ int main()
     Check(ParseInt("42") == 42, "decimal parsing");
     Check(CanRead(code, sizeof(code)), "CanRead on own memory");
     Check(!CanRead(reinterpret_cast<const void*>(0x1000), 4), "CanRead rejects invalid address");
+
+    // Guided CanFly detection: only bytes that changed 0 -> 1 between snapshots qualify.
+    unsigned char playerBytes[16] = {};
+    AutoDetect::BoolSnapshot survival;
+    AutoDetect::BoolSnapshot creative;
+    Check(AutoDetect::CaptureBoolSnapshot(reinterpret_cast<uintptr_t>(playerBytes),
+                                          sizeof(playerBytes), survival),
+          "CanFly survival snapshot captured");
+    playerBytes[3] = 1;
+    playerBytes[7] = 1;
+    Check(AutoDetect::CaptureBoolSnapshot(reinterpret_cast<uintptr_t>(playerBytes),
+                                          sizeof(playerBytes), creative),
+          "CanFly creative snapshot captured");
+    const auto canFlyCandidates = AutoDetect::FindCanFlyCandidates(
+        survival, creative, { 7 }, 24);
+    Check(canFlyCandidates.size() == 1 && canFlyCandidates.front() == 3,
+          "CanFly candidate ignores excluded offset");
+    Check(AutoDetect::RecommendedCanFlySnapshotSize() > 0,
+          "CanFly snapshot size is configured");
 
     std::cout << (failures ? "UNIT TESTS FAILED\n" : "UNIT TESTS PASSED\n");
     return failures ? 1 : 0;

@@ -91,7 +91,8 @@ option(BUILD_TESTS "Build smoke host and unit tests" ON)
 if(BUILD_TESTS)
     add_executable(SmokeHost tests/SmokeHost.cpp)
 
-    add_executable(UnitTests tests/UnitTests.cpp src/common.cpp src/utils/Memory.cpp)
+    add_executable(UnitTests tests/UnitTests.cpp src/common.cpp src/utils/Memory.cpp
+                   src/features/AutoDetect.cpp)
     target_include_directories(UnitTests PRIVATE src "${IMGUI_DIR}")
     target_link_libraries(UnitTests PRIVATE psapi libhat::libhat)
 endif()

@@ -47,8 +47,10 @@ static DWORD WINAPI InitializeThread(LPVOID)
                     "[Addresses] LocalPlayer is 0x0; fly/speed and ESP cannot work.");
         warnMissing(g_offsets.tickFunction != 0,
                     "[Addresses] Tick is 0x0; fly/speed will use the frame fallback.");
-        warnMissing(g_offsets.entityVelocity != 0,
-                    "[Offsets] EntityVelocity is 0x0; fly/speed cannot work.");
+        warnMissing(g_offsets.entityVelocity != 0 || g_offsets.entityCanFly != 0 ||
+                        g_offsets.entityPosition != 0,
+                    "[Offsets] EntityVelocity/CanFly/EntityPosition are all 0x0; fly cannot work. "
+                    "Speed multiplier still needs EntityVelocity.");
         warnMissing(g_offsets.entityPosition != 0,
                     "[Offsets] EntityPosition is 0x0; ESP cannot work.");
         warnMissing(g_offsets.levelPointer != 0 && g_offsets.levelEntityList != 0,

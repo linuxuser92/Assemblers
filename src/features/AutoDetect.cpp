@@ -59,6 +59,71 @@ namespace
     {
         return (std::max)({ std::fabs(v.x), std::fabs(v.y), std::fabs(v.z) });
     }
+
+    constexpr uint64_t kCanFlySnapshotSize = 0x1800;
+}
+
+uint64_t AutoDetect::RecommendedCanFlySnapshotSize()
+{
+    return kCanFlySnapshotSize;
+}
+
+bool AutoDetect::CaptureBoolSnapshot(uintptr_t player, uint64_t size, BoolSnapshot& out)
+{
+    out = {};
+    if (!player || !size) return false;
+
+    // One range check and one copy: calling CanRead/VirtualQuery per byte would make the
+    // guided scan noticeably stall the render thread.
+    if (!CanRead(reinterpret_cast<const void*>(player), static_cast<size_t>(size))) return false;
+
+    out.player = player;
+    out.size = size;
+    out.values.resize(static_cast<size_t>(size));
+    std::memcpy(out.values.data(), reinterpret_cast<const void*>(player),
+                static_cast<size_t>(size));
+
+    Log("AutoDetect: captured %llu player bytes at 0x%llX",
+        static_cast<unsigned long long>(size), static_cast<unsigned long long>(player));
+    return true;
+}
+
+std::vector<uint64_t> AutoDetect::FindCanFlyCandidates(const BoolSnapshot& survival,
+                                                       const BoolSnapshot& creative,
+                                                       const std::vector<uint64_t>& excluded,
+                                                       size_t limit)
+{
+    std::vector<uint64_t> results;
+    if (!survival.player || survival.player != creative.player ||
+        survival.size != creative.size || survival.size == 0)
+    {
+        Log("AutoDetect: CanFly snapshots do not match; capture Survival and Creative again");
+        return results;
+    }
+
+    const auto isExcluded = [&](uint64_t offset) {
+        for (uint64_t skip : excluded)
+        {
+            if (!skip) continue;
+            const uint64_t low = skip > 1 ? skip - 1 : 0;
+            if (offset >= low && offset <= skip + 1) return true;
+        }
+        return false;
+    };
+
+    for (uint64_t offset = 0; offset < survival.size; ++offset)
+    {
+        const uint8_t before = survival.values[static_cast<size_t>(offset)];
+        const uint8_t after = creative.values[static_cast<size_t>(offset)];
+        if (before != 0 || after != 1 || isExcluded(offset)) continue;
+
+        results.push_back(offset);
+        if (results.size() >= limit) break;
+    }
+
+    Log("AutoDetect: %zu CanFly candidates (0 in Survival -> 1 in Creative)",
+        results.size());
+    return results;
 }
 
 std::vector<AutoDetect::PlayerCandidate> AutoDetect::FindPlayerCandidates()

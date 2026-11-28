@@ -43,19 +43,72 @@ namespace
     uintptr_t s_positionFlyPlayer = 0;
     float s_positionFlyY = 0.0f;
     ULONGLONG s_positionFlyLast = 0;
+
+    // Vanilla/CanFly mode: write the game's own fly flag instead of velocity. We save the
+    // original byte so disabling Fly or unloading does not leave the flag changed.
+    bool s_canFlyActive = false;
+    uintptr_t s_canFlyPlayer = 0;
+    uint64_t s_canFlyOffset = 0;
+    uint8_t s_canFlyOriginal = 0;
+
+    void RestoreCanFly()
+    {
+        if (s_canFlyActive && s_canFlyPlayer && s_canFlyOffset)
+        {
+            WriteValue(s_canFlyPlayer + s_canFlyOffset, s_canFlyOriginal);
+            Log("Fly CanFly mode disabled (offset 0x%llX restored)",
+                static_cast<unsigned long long>(s_canFlyOffset));
+        }
+        s_canFlyActive = false;
+        s_canFlyPlayer = 0;
+        s_canFlyOffset = 0;
+    }
 }
 
 void Features::ApplyTick()
 {
     const auto& s = Config::g_settings;
-    if (!s.fly && s.speedMultiplier == 1.0f && !s.noFallDamage) return;
+    if (!s.fly && s.speedMultiplier == 1.0f && !s.noFallDamage)
+    {
+        RestoreCanFly();
+        return;
+    }
 
     const uintptr_t player = g_game.LocalPlayer();
     if (!player) return;
 
+    // Horion-style fly: use the game's own CanFly bool when configured. This avoids all
+    // velocity/position detection and keeps single-player vanilla flight semantics.
+    const bool canFlyMode = s.fly && g_offsets.entityCanFly != 0;
+    if (canFlyMode)
+    {
+        const uintptr_t address = player + g_offsets.entityCanFly;
+        if (!s_canFlyActive || s_canFlyPlayer != player ||
+            s_canFlyOffset != g_offsets.entityCanFly)
+        {
+            RestoreCanFly();
+            uint8_t original = 0;
+            if (!ReadValue(address, original)) return;
+            s_canFlyActive = true;
+            s_canFlyPlayer = player;
+            s_canFlyOffset = g_offsets.entityCanFly;
+            s_canFlyOriginal = original;
+            Log("Fly CanFly mode engaged at offset 0x%llX (no velocity needed)",
+                static_cast<unsigned long long>(g_offsets.entityCanFly));
+        }
+        const uint8_t enabled = 1;
+        WriteValue(address, enabled);
+    }
+    else
+    {
+        RestoreCanFly();
+    }
+
     const bool jumpHeld = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
 
-    if ((s.fly || s.speedMultiplier != 1.0f) && g_offsets.entityVelocity)
+    // Velocity is still used for the speed multiplier, but not for fly in CanFly mode.
+    if (g_offsets.entityVelocity &&
+        (s.speedMultiplier != 1.0f || (s.fly && !canFlyMode)))
     {
         Vec3 velocity{};
         const uintptr_t address = player + g_offsets.entityVelocity;
@@ -63,7 +116,7 @@ void Features::ApplyTick()
         {
             // UI says "hold jump": only override vertical velocity while Space is down.
             // Use the magnitude so a negative configured speed still climbs.
-            if (s.fly && jumpHeld) velocity.y = std::fabs(s.flySpeed);
+            if (s.fly && !canFlyMode && jumpHeld) velocity.y = std::fabs(s.flySpeed);
             velocity.x *= s.speedMultiplier;
             velocity.z *= s.speedMultiplier;
             if (std::isfinite(velocity.x) && std::isfinite(velocity.y) && std::isfinite(velocity.z))
@@ -83,7 +136,7 @@ void Features::ApplyTickPost()
 
     // Position mode is only used when velocity mode is unavailable. Velocity writes must stay
     // in ApplyTick (before physics); position writes must happen after physics.
-    if (!s.fly || g_offsets.entityVelocity || !g_offsets.entityPosition)
+    if (!s.fly || g_offsets.entityCanFly || g_offsets.entityVelocity || !g_offsets.entityPosition)
     {
         s_positionFlyActive = false;
         s_positionFlyLast = 0;
@@ -145,6 +198,7 @@ void Features::ApplyWorld()
 
 void Features::Restore()
 {
-    // Values are only written while their feature is enabled, so there is nothing persistent
-    // to restore. This hook exists for future patches that need cleanup on unload.
+    RestoreCanFly();
+    s_positionFlyActive = false;
+    s_positionFlyLast = 0;
 }

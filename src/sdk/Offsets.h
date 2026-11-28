@@ -22,6 +22,7 @@ struct Offsets
     // Offsets inside Entity / Player.
     uintptr_t entityPosition = 0; // Vec3 (3 x float)
     uintptr_t entityVelocity = 0; // Vec3 (3 x float)
+    uintptr_t entityCanFly = 0;   // bool (vanilla/creative fly, no velocity needed)
     uintptr_t entityOnGround = 0; // bool
     uintptr_t entityHealth = 0;   // float (usually 20.0 when full)
     uintptr_t entityName = 0;     // char* or std::string (best effort)
@@ -54,6 +55,7 @@ struct OffsetEditor
     uint64_t levelTime = 0;
     uint64_t entityPosition = 0;
     uint64_t entityVelocity = 0;
+    uint64_t entityCanFly = 0;
     uint64_t entityOnGround = 0;
     uint64_t entityHealth = 0;
     uint64_t entityName = 0;

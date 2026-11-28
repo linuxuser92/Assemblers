@@ -95,6 +95,7 @@ void OffsetEditor::LoadFromIni()
 
     entityPosition = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityPosition"));
     entityVelocity = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityVelocity"));
+    entityCanFly = static_cast<uint64_t>(ReadRva(L"Offsets", L"CanFly"));
     entityOnGround = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityOnGround"));
     entityHealth = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityHealth"));
     entityName = static_cast<uint64_t>(ReadRva(L"Offsets", L"EntityName"));
@@ -120,6 +121,7 @@ void OffsetEditor::SaveToIni() const
     WriteRva(L"Offsets", L"LevelTime", levelTime);
     WriteRva(L"Offsets", L"EntityPosition", entityPosition);
     WriteRva(L"Offsets", L"EntityVelocity", entityVelocity);
+    WriteRva(L"Offsets", L"CanFly", entityCanFly);
     WriteRva(L"Offsets", L"EntityOnGround", entityOnGround);
     WriteRva(L"Offsets", L"EntityHealth", entityHealth);
     WriteRva(L"Offsets", L"EntityName", entityName);
@@ -153,6 +155,7 @@ void Offsets::Load()
 
     entityPosition = static_cast<uintptr_t>(editor.entityPosition);
     entityVelocity = static_cast<uintptr_t>(editor.entityVelocity);
+    entityCanFly = static_cast<uintptr_t>(editor.entityCanFly);
     entityOnGround = static_cast<uintptr_t>(editor.entityOnGround);
     entityHealth = static_cast<uintptr_t>(editor.entityHealth);
     entityName = static_cast<uintptr_t>(editor.entityName);

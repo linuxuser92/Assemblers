@@ -217,19 +217,29 @@ and reload them live (the tick hook is refreshed automatically). The same tab ha
 section: enable Minecraft's coordinate display, enter your current X/Y/Z, then click **One-click
 full setup**. It finds `LocalPlayer`, auto-detects a matching `EntityPosition` independently of ESP
 success, applies every ESP offset it can (`Level`, `LevelEntityList`, `EntityListStride`, `Camera`,
-`ViewProj`, `MatrixTransposed`), and always prompts you to release then press `Space` once when
+`ViewProj`, `MatrixTransposed`), and prompts you to release then press `Space` once when
 `EntityVelocity` is still missing. Everything is applied automatically.
-The individual **Scan for LocalPlayer**, **Detect position (fallback)**, **Detect all ESP offsets**, and
-**Detect velocity** buttons remain available if you want to run the steps manually or pick a
-different candidate. Enabling Fly with `EntityVelocity` missing starts the velocity scan first;
-position detection is available as a fallback but is no longer guessed from arbitrary large vectors.
+
+For **fly without velocity**, the Offsets window has a guided **CanFly** detector. Stay in Survival
+and click **Capture Survival**, switch the world to Creative and click **Capture Creative**, then
+switch back to Survival and choose a candidate. The scan only reads memory; candidates are bytes
+that were `0` in Survival and `1` in Creative. You can also type `Offsets.CanFly` manually if you
+already know it. When `CanFly` is set, Fly writes the game's own fly flag and ignores
+`EntityVelocity` / `EntityPosition`.
+
+The individual **Scan for LocalPlayer**, **Detect position (fallback)**, **Detect all ESP offsets**,
+and **Detect velocity** buttons remain available if you want to run the steps manually or pick a
+different candidate. Enabling Fly with velocity/CanFly/position all missing starts the velocity
+scan; position detection is available as a fallback but is no longer guessed from arbitrary large
+vectors.
 All addresses are **RVAs relative to the Minecraft module base** — ASLR is handled automatically.
 If a value is `0`, that feature is simply disabled. The menu now shows green `OK` / red `MISSING`
 statuses for each requirement, so you can see exactly what is holding a feature back.
 
 | Feature | Required INI values |
 | --- | --- |
-| Fly / speed | `Addresses.LocalPlayer`, `Offsets.EntityVelocity` (or `Offsets.EntityPosition` for fly only) |
+| Fly | `Addresses.LocalPlayer` plus `Offsets.CanFly` (no velocity) or `Offsets.EntityVelocity` or `Offsets.EntityPosition` |
+| Speed multiplier | `Addresses.LocalPlayer`, `Offsets.EntityVelocity` |
 | No fall damage | `Addresses.LocalPlayer`, `Offsets.EntityOnGround` |
 | ESP | `Addresses.LocalPlayer`, `Addresses.Level` (or `Patterns.Level`), `Offsets.LevelEntityList`, `Offsets.EntityPosition`, `Patterns.Camera` (or `Addresses.Camera`), `Offsets.ViewProj` |
 | ESP health bars | `Offsets.EntityHealth` (optional — bars are hidden when missing) |
@@ -268,6 +278,7 @@ LevelTime=0x0
 ; Offsets from the Player/Entity object
 EntityPosition=0x0
 EntityVelocity=0x0     ; Vec3, used by fly/speed
+CanFly=0x0             ; bool, vanilla fly flag; makes fly work without velocity
 EntityOnGround=0x0     ; bool, used by no-fall-damage
 EntityHealth=0x0       ; float, optional ESP health bars
 EntityName=0x0
