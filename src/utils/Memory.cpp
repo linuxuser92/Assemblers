@@ -1,55 +1,10 @@
 #include "Memory.h"
 
-#include <cctype>
 #include <cstring>
 #include <psapi.h>
-#include <vector>
 
-namespace
-{
-    bool ParseByte(std::string_view token, uint8_t& value, bool& wildcard)
-    {
-        if (token.size() != 2) return false;
-        if (token[0] == '?' && token[1] == '?')
-        {
-            wildcard = true;
-            value = 0;
-            return true;
-        }
-        auto nibble = [](char c) -> int {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-            return -1;
-        };
-        const int hi = nibble(token[0]);
-        const int lo = nibble(token[1]);
-        if (hi < 0 || lo < 0) return false;
-        wildcard = false;
-        value = static_cast<uint8_t>((hi << 4) | lo);
-        return true;
-    }
-
-    bool CompilePattern(std::string_view pattern, std::vector<uint8_t>& bytes, std::vector<bool>& wildcards)
-    {
-        size_t i = 0;
-        while (i < pattern.size())
-        {
-            while (i < pattern.size() && std::isspace(static_cast<unsigned char>(pattern[i]))) ++i;
-            if (i >= pattern.size()) break;
-
-            const size_t end = pattern.find_first_of(" \t\r\n", i);
-            const auto token = pattern.substr(i, end == std::string_view::npos ? end : end - i);
-            uint8_t byte = 0;
-            bool wildcard = false;
-            if (!ParseByte(token, byte, wildcard)) return false;
-            bytes.push_back(byte);
-            wildcards.push_back(wildcard);
-            i = end == std::string_view::npos ? pattern.size() : end;
-        }
-        return !bytes.empty();
-    }
-}
+#include <libhat/scanner.hpp>
+#include <libhat/signature.hpp>
 
 namespace Memory
 {
@@ -73,26 +28,16 @@ namespace Memory
 
     uintptr_t Scan(uintptr_t start, size_t length, std::string_view pattern)
     {
-        std::vector<uint8_t> bytes;
-        std::vector<bool> wildcards;
-        if (!CompilePattern(pattern, bytes, wildcards)) return 0;
-        if (length < bytes.size()) return 0;
+        if (!start || !length) return 0;
 
-        const auto* data = reinterpret_cast<const uint8_t*>(start);
-        for (size_t i = 0; i <= length - bytes.size(); ++i)
-        {
-            bool match = true;
-            for (size_t j = 0; j < bytes.size(); ++j)
-            {
-                if (!wildcards[j] && data[i + j] != bytes[j])
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match) return start + i;
-        }
-        return 0;
+        auto parsed = hat::parse_signature(pattern);
+        if (!parsed.has_value()) return 0;
+
+        auto* begin = reinterpret_cast<std::byte*>(start);
+        const hat::scan_result result = hat::find_pattern(
+            begin, begin + length, parsed.value(), hat::scan_alignment::X1,
+            hat::scan_hint::x86_64);
+        return result.has_result() ? reinterpret_cast<uintptr_t>(result.get()) : 0;
     }
 
     uintptr_t ScanGame(std::string_view pattern)

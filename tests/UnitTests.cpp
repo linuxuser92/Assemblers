@@ -25,6 +25,11 @@ int main()
     Check(found == reinterpret_cast<uintptr_t>(code), "wildcard pattern matches at offset 0");
     Check(Memory::Scan(reinterpret_cast<uintptr_t>(code), sizeof(code), "48 8B 05 FF FF FF FF") == 0,
           "non-matching pattern returns 0");
+    Check(Memory::Scan(reinterpret_cast<uintptr_t>(code), sizeof(code),
+                       "48 8B 05 ?0 ?0 ?0 ?0") == reinterpret_cast<uintptr_t>(code),
+          "libhat partial-nibble mask matches");
+    Check(Memory::Scan(reinterpret_cast<uintptr_t>(code), sizeof(code), "not a pattern") == 0,
+          "invalid pattern returns 0");
     // `48 8B 05` is a 7-byte instruction: REX + opcode + ModRM + disp32.
     Check(Memory::FollowRipRelative(found) == found + 7 + 0x10, "RIP-relative resolution (7-byte)");
     const unsigned char callCode[] = { 0xE8, 0x10, 0x00, 0x00, 0x00 };

@@ -68,13 +68,17 @@ This is experimental software. Read this before reporting an issue:
 
 ## Dependencies
 
-The required sources are vendored in `deps/imgui` and `deps/MinHook`, so the project builds
-without extra setup. To update them later:
+The required sources are vendored in `deps/imgui`, `deps/MinHook`, and `deps/libhat`, so the
+project builds without extra setup. CMake 3.23+ is required by libhat. To update them later:
 
 ```powershell
 git clone https://github.com/ocornut/imgui.git deps/imgui
 git clone https://github.com/TsudaKageyu/minhook.git deps/MinHook
+git clone --branch v0.11.1 --depth 1 https://github.com/BasedInc/libhat.git deps/libhat
 ```
+
+`libhat` provides the SIMD signature scanner used by `Memory::Scan` and `Memory::ScanGame`.
+Its pattern syntax is backwards-compatible with the old `??` wildcard format.
 
 Use an ImGui release that has `backends/imgui_impl_dx12.cpp` and the **new**
 `ImGui_ImplDX12_Init(device, numFrames, format, srvHeap, cpuHandle, gpuHandle)` signature
@@ -303,7 +307,7 @@ The code is deliberately defensive: unset offsets are skipped and logged rather 
 src/main.cpp              DllMain, init/unload thread, console + log
 src/common.*              logging, module paths, shared includes
 src/config/Config.*       INI-backed settings
-src/utils/Memory.*        pattern scanning, RIP-relative resolution
+src/utils/Memory.*        libhat SIMD pattern scanning, RIP-relative resolution
 src/sdk/Offsets.*         version-specific addresses/offsets (INI)
 src/sdk/Game.*            entity list, camera, world-to-screen projection
 src/render/Renderer.*     ImGui + D3D12 device/RTV/SRV, command list

@@ -6,8 +6,9 @@
 
 namespace Memory
 {
-    // Finds a byte signature inside [start, start+length).
-    // Pattern format: "48 8B 05 ?? ?? ?? ??" — "??" is a wildcard.
+    // Finds a byte signature inside [start, start+length) using libhat's SIMD scanner.
+    // Pattern format: "48 8B 05 ?? ?? ?? ??" — "??" is a wildcard. libhat also
+    // accepts "?" and partial-nibble masks such as "?3".
     // Returns the absolute address of the first match, or 0.
     uintptr_t Scan(uintptr_t start, size_t length, std::string_view pattern);
 
