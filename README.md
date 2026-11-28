@@ -20,12 +20,12 @@ This is experimental software. Read this before reporting an issue:
   showing `MISSING` in the menu stays disabled until you fill in the matching `[Addresses]` /
   `[Offsets]` values or run **Auto-detect** successfully.
 - **Fly uses `Offsets.EntityVelocity` by default.** When it is missing, enabling Fly starts a
-  velocity scan that works from any menu tab: **release `Space`, then press and hold it once**.
+  velocity scan that works from any menu column: **release `Space`, then press and hold it once**.
   The scan now keeps zero-velocity candidates (the old filter discarded them), validates both
   samples, rejects impossible deltas, and weights vertical change, so a normal jump identifies the
   offset. On a fresh launch it retries quietly until the player is ready instead of wasting the
   prompt with a 0-candidate scan. If velocity genuinely cannot be found,
-  **Detect position (fallback)** in the Offsets tab can set `EntityPosition`: the mod then
+  **Detect position (fallback)** in the Offsets window can set `EntityPosition`: the mod then
   re-asserts your Y after each tick, **hold `Space` to climb, release it to hover**. The
   configured `FlySpeed` magnitude is used, so a negative value still climbs. Position detection
   no longer guesses by vector size — it must match a real player candidate or your entered
@@ -144,14 +144,15 @@ auto-setup. Both can be turned off independently.
 
 ### Menu layout
 
-The menu uses a two-column layout: a fixed navigation column on the left (ESP, Movement, World,
-Offsets, Settings) and a scrollable content column on the right. Related controls are paired inside
-each section (for example requirement statuses, ESP toggles, and HUD settings).
+The main menu uses three side-by-side vertical columns: **ESP**, **Movement**, and **World**.
+Drag a column header onto another header to reorder them. **Offsets** and **Settings** open as
+separate windows from the buttons at the top. Related controls are paired inside each column
+(for example requirement statuses, ESP toggles, and HUD settings).
 
-The **ESP** tab also has `Health bars`, `Show players`, `Show entities`, `Sort by distance`, and
+The **ESP** column also has `Health bars`, `Show players`, `Show entities`, `Sort by distance`, and
 `Radar` controls. The radar appears in the bottom-right corner and plots nearby entities around
 your position; `Radar range` sets how many blocks it covers. Health bars require `EntityHealth`,
-which can be detected with **Detect health** in the Offsets tab or automatically during
+which can be detected with **Detect health** in the Offsets window or automatically during
 **One-click full setup**. Player/entity classification requires `PlayerVTable`; without it all
 entities are treated as generic entities.
 

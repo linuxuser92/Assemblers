@@ -19,6 +19,8 @@
 static bool s_debugConsoleOpen = false;
 static ImVec2 s_menuPos(80.0f, 80.0f);
 static ImVec2 s_consolePos(200.0f, 160.0f);
+static bool s_offsetsWindowOpen = false;
+static bool s_settingsWindowOpen = false;
 static OffsetEditor s_offsetEditor;
 static bool s_offsetEditorLoaded = false;
 
@@ -35,16 +37,6 @@ static std::string s_setupStatus = "idle";
 
 namespace
 {
-    enum class MenuSection
-    {
-        Esp,
-        Movement,
-        World,
-        Offsets,
-        Settings,
-    };
-    static MenuSection s_menuSection = MenuSection::Esp;
-
     void HandleWindowMovement()
     {
         const auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
@@ -163,7 +155,7 @@ namespace
 
         // Do not run FindPlayerCandidates() here: it walks the whole game module and is too
         // heavy for an automatic render-thread retry. The user can run it manually from the
-        // Offsets tab if this pointer stays invalid.
+        // Offsets window if this pointer stays invalid.
         if (!player || !CanRead(reinterpret_cast<const void*>(player), sizeof(Vec3)))
         {
             Log("Fly setup skipped: LocalPlayer 0x%llX is not readable",
@@ -499,7 +491,7 @@ namespace
     void DrawMainWindow()
     {
         auto& s = Config::g_settings;
-        ImGui::SetNextWindowSize({ 700.0f, 520.0f }, ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize({ 1080.0f, 620.0f }, ImGuiCond_FirstUseEver);
         ImGui::SetWindowPos("BedrockMenu", s_menuPos, ImGuiCond_Always);
         if (!ImGui::Begin("BedrockMenu", &s.menuOpen, ImGuiWindowFlags_NoCollapse))
         {
@@ -508,29 +500,54 @@ namespace
         }
         s_menuPos = ImGui::GetWindowPos();
 
-        // Column layout: fixed navigation column on the left, content on the right.
-        ImGui::BeginChild("##NavColumn", ImVec2(140.0f, 0.0f), true,
-                          ImGuiWindowFlags_NoScrollbar);
-        {
-            const auto navButton = [](const char* label, MenuSection section) {
-                const bool selected = s_menuSection == section;
-                if (selected)
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.34f, 0.62f, 1.0f));
-                if (ImGui::Button(label, ImVec2(-1.0f, 0.0f))) s_menuSection = section;
-                if (selected) ImGui::PopStyleColor();
-            };
-            navButton("ESP", MenuSection::Esp);
-            navButton("Movement", MenuSection::Movement);
-            navButton("World", MenuSection::World);
-            navButton("Offsets", MenuSection::Offsets);
-            navButton("Settings", MenuSection::Settings);
-        }
-        ImGui::EndChild();
-
+        if (ImGui::Button("Offsets")) s_offsetsWindowOpen = true;
         ImGui::SameLine();
-        ImGui::BeginChild("##ContentColumn", ImVec2(0.0f, 0.0f), true);
+        if (ImGui::Button("Settings")) s_settingsWindowOpen = true;
+        ImGui::SameLine();
+        ImGui::TextDisabled("Drag a column header to reorder");
+        ImGui::Separator();
 
-            if (s_menuSection == MenuSection::Esp)
+        // Three side-by-side vertical columns. Headers are drag sources/targets so the user
+        // can reorder ESP / Movement / World without touching the underlying feature code.
+        static int columnOrder[3] = { 0, 1, 2 };
+        static const char* columnNames[3] = { "ESP", "Movement", "World" };
+
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float columnWidth = (ImGui::GetContentRegionAvail().x - spacing * 2.0f) / 3.0f;
+
+        for (int column = 0; column < 3; ++column)
+        {
+            if (column > 0) ImGui::SameLine();
+            const std::string childId = "##Column" + std::to_string(column);
+            ImGui::BeginChild(childId.c_str(), ImVec2(columnWidth, 0.0f), true);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.34f, 0.62f, 1.0f));
+            ImGui::Button(columnNames[columnOrder[column]], ImVec2(-1.0f, 0.0f));
+            ImGui::PopStyleColor();
+            if (ImGui::BeginDragDropSource())
+            {
+                const int value = columnOrder[column];
+                ImGui::SetDragDropPayload("BEDROCKMENU_COLUMN", &value, sizeof(value));
+                ImGui::Text("Move %s", columnNames[value]);
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload =
+                        ImGui::AcceptDragDropPayload("BEDROCKMENU_COLUMN"))
+                {
+                    const int dragged = *static_cast<const int*>(payload->Data);
+                    int from = -1;
+                    for (int j = 0; j < 3; ++j)
+                        if (columnOrder[j] == dragged) from = j;
+                    if (from >= 0 && from != column)
+                        std::swap(columnOrder[from], columnOrder[column]);
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::Separator();
+
+            if (columnOrder[column] == 0)
             {
                 ImGui::Checkbox("Enable ESP", &s.espEnabled);
 
@@ -582,7 +599,7 @@ namespace
                 ImGui::Columns(1);
             }
 
-            if (s_menuSection == MenuSection::Movement)
+            if (columnOrder[column] == 1)
             {
                 ImGui::Columns(2, "##MoveRequirements", false);
                 Requirement("LocalPlayer", g_offsets.localPlayerPointer != 0);
@@ -624,7 +641,7 @@ namespace
                         "Speed multiplier needs LocalPlayer + EntityVelocity.");
             }
 
-            if (s_menuSection == MenuSection::World)
+            if (columnOrder[column] == 2)
             {
                 ImGui::Columns(2, "##WorldRequirements", false);
                 Requirement("Gamma address", g_offsets.gammaAddress != 0);
@@ -647,8 +664,13 @@ namespace
                 ImGui::Checkbox("Show coordinates", &s.showCoords);
             }
 
-            if (s_menuSection == MenuSection::Offsets)
-            {
+            ImGui::EndChild();
+        }
+        ImGui::End();
+
+        if (s_offsetsWindowOpen)
+        {
+            ImGui::Begin("Offsets", &s_offsetsWindowOpen, ImGuiWindowFlags_NoCollapse);
                 if (!s_offsetEditorLoaded)
                 {
                     s_offsetEditor.LoadFromIni();
@@ -929,10 +951,12 @@ namespace
                 if (!s_selectedPlayer)
                     ImGui::TextDisabled("Pick a LocalPlayer candidate first.");
 
-            }
+            ImGui::End();
+        }
 
-            if (s_menuSection == MenuSection::Settings)
-            {
+        if (s_settingsWindowOpen)
+        {
+            ImGui::Begin("Settings", &s_settingsWindowOpen, ImGuiWindowFlags_NoCollapse);
                 ImGui::Columns(2, "##SettingsCols", false);
                 ImGui::Text("Insert: menu   F1-F5: toggles   F9: log   End: unload");
                 ImGui::Text("Ctrl+Arrows: move window");
@@ -965,15 +989,15 @@ namespace
                     g_shouldUnload = true;
                 }
                 ImGui::TextWrapped("Single-player use only. Offsets are in BedrockMenu.ini.");
-            }
-        ImGui::EndChild();
-        ImGui::End();
+            ImGui::End();
+        }
     }
 }
 
 bool Menu::AnyWindowOpen()
 {
-    return Config::g_settings.menuOpen || s_debugConsoleOpen;
+    return Config::g_settings.menuOpen || s_debugConsoleOpen ||
+           s_offsetsWindowOpen || s_settingsWindowOpen;
 }
 
 void Menu::PollHotkeys()
