@@ -17,8 +17,10 @@
 #include <string>
 
 static bool s_debugConsoleOpen = false;
-static ImVec2 s_menuPos(80.0f, 80.0f);
 static ImVec2 s_consolePos(200.0f, 160.0f);
+static bool s_espWindowOpen = true;
+static bool s_movementWindowOpen = true;
+static bool s_worldWindowOpen = true;
 static bool s_offsetsWindowOpen = false;
 static bool s_settingsWindowOpen = false;
 static OffsetEditor s_offsetEditor;
@@ -37,27 +39,29 @@ static std::string s_setupStatus = "idle";
 
 namespace
 {
+    void DrawMenuLinks()
+    {
+        if (ImGui::SmallButton("ESP")) s_espWindowOpen = true;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Move")) s_movementWindowOpen = true;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("World")) s_worldWindowOpen = true;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Offsets")) s_offsetsWindowOpen = true;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Settings")) s_settingsWindowOpen = true;
+        ImGui::Separator();
+    }
+
     void HandleWindowMovement()
     {
         const auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
         if (!down(VK_CONTROL)) return;
 
-        // Ctrl + arrows moves the visible window. Ctrl + Shift + arrows always
-        // moves the debug console, so both windows can be placed independently.
-        ImVec2* target = nullptr;
-        if (down(VK_SHIFT))
-        {
-            if (s_debugConsoleOpen) target = &s_consolePos;
-        }
-        else if (Config::g_settings.menuOpen)
-        {
-            target = &s_menuPos;
-        }
-        else if (s_debugConsoleOpen)
-        {
-            target = &s_consolePos;
-        }
-        if (!target) return;
+        // Feature windows are moved by dragging their title bars. Ctrl + Shift + arrows
+        // remains as a keyboard fallback for the debug console.
+        if (!down(VK_SHIFT) || !s_debugConsoleOpen) return;
+        ImVec2* target = &s_consolePos;
 
         constexpr float step = 14.0f;
         if (down(VK_LEFT)) target->x -= step;
@@ -488,67 +492,25 @@ namespace
         if (s.espRadar) DrawRadar(drawList, viewport);
     }
 
-    void DrawMainWindow()
+    void DrawMenuWindows()
     {
         auto& s = Config::g_settings;
-        ImGui::SetNextWindowSize({ 1080.0f, 620.0f }, ImGuiCond_FirstUseEver);
-        ImGui::SetWindowPos("BedrockMenu", s_menuPos, ImGuiCond_Always);
-        if (!ImGui::Begin("BedrockMenu", &s.menuOpen, ImGuiWindowFlags_NoCollapse))
+        if (!s.menuOpen) return;
+
+        // Each section is now an independent ImGui window. They can be dragged and resized
+        // separately; the small buttons at the top reopen a closed section.
+        if (s_espWindowOpen)
         {
-            s_menuPos = ImGui::GetWindowPos();
-            return;
-        }
-        s_menuPos = ImGui::GetWindowPos();
-
-        if (ImGui::Button("Offsets")) s_offsetsWindowOpen = true;
-        ImGui::SameLine();
-        if (ImGui::Button("Settings")) s_settingsWindowOpen = true;
-        ImGui::SameLine();
-        ImGui::TextDisabled("Drag a column header to reorder");
-        ImGui::Separator();
-
-        // Three side-by-side vertical columns. Headers are drag sources/targets so the user
-        // can reorder ESP / Movement / World without touching the underlying feature code.
-        static int columnOrder[3] = { 0, 1, 2 };
-        static const char* columnNames[3] = { "ESP", "Movement", "World" };
-
-        const float spacing = ImGui::GetStyle().ItemSpacing.x;
-        const float columnWidth = (ImGui::GetContentRegionAvail().x - spacing * 2.0f) / 3.0f;
-
-        for (int column = 0; column < 3; ++column)
-        {
-            if (column > 0) ImGui::SameLine();
-            const std::string childId = "##Column" + std::to_string(column);
-            ImGui::BeginChild(childId.c_str(), ImVec2(columnWidth, 0.0f), true);
-
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.34f, 0.62f, 1.0f));
-            ImGui::Button(columnNames[columnOrder[column]], ImVec2(-1.0f, 0.0f));
-            ImGui::PopStyleColor();
-            if (ImGui::BeginDragDropSource())
+            ImGui::SetNextWindowPos({ 30.0f, 80.0f }, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({ 360.0f, 560.0f }, ImGuiCond_FirstUseEver);
+            if (!ImGui::Begin("ESP", &s_espWindowOpen, ImGuiWindowFlags_NoCollapse))
             {
-                const int value = columnOrder[column];
-                ImGui::SetDragDropPayload("BEDROCKMENU_COLUMN", &value, sizeof(value));
-                ImGui::Text("Move %s", columnNames[value]);
-                ImGui::EndDragDropSource();
+                ImGui::End();
             }
-            if (ImGui::BeginDragDropTarget())
+            else
             {
-                if (const ImGuiPayload* payload =
-                        ImGui::AcceptDragDropPayload("BEDROCKMENU_COLUMN"))
-                {
-                    const int dragged = *static_cast<const int*>(payload->Data);
-                    int from = -1;
-                    for (int j = 0; j < 3; ++j)
-                        if (columnOrder[j] == dragged) from = j;
-                    if (from >= 0 && from != column)
-                        std::swap(columnOrder[from], columnOrder[column]);
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::Separator();
+                DrawMenuLinks();
 
-            if (columnOrder[column] == 0)
-            {
                 ImGui::Checkbox("Enable ESP", &s.espEnabled);
 
                 ImGui::Columns(2, "##EspRequirements", false);
@@ -597,10 +559,22 @@ namespace
                 ImGui::NextColumn();
                 ImGui::ColorEdit4("Entity color", reinterpret_cast<float*>(&s.espColorOther));
                 ImGui::Columns(1);
+            ImGui::End();
             }
+        }
 
-            if (columnOrder[column] == 1)
+        if (s_movementWindowOpen)
+        {
+            ImGui::SetNextWindowPos({ 410.0f, 80.0f }, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({ 360.0f, 560.0f }, ImGuiCond_FirstUseEver);
+            if (!ImGui::Begin("Movement", &s_movementWindowOpen, ImGuiWindowFlags_NoCollapse))
             {
+                ImGui::End();
+            }
+            else
+            {
+                DrawMenuLinks();
+
                 ImGui::Columns(2, "##MoveRequirements", false);
                 Requirement("LocalPlayer", g_offsets.localPlayerPointer != 0);
                 ImGui::NextColumn();
@@ -639,10 +613,22 @@ namespace
                 if (s.speedMultiplier != 1.0f && !speedReady)
                     ImGui::TextColored(ImVec4(1.0f, 0.40f, 0.35f, 1.0f),
                         "Speed multiplier needs LocalPlayer + EntityVelocity.");
+            ImGui::End();
             }
+        }
 
-            if (columnOrder[column] == 2)
+        if (s_worldWindowOpen)
+        {
+            ImGui::SetNextWindowPos({ 790.0f, 80.0f }, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({ 360.0f, 560.0f }, ImGuiCond_FirstUseEver);
+            if (!ImGui::Begin("World", &s_worldWindowOpen, ImGuiWindowFlags_NoCollapse))
             {
+                ImGui::End();
+            }
+            else
+            {
+                DrawMenuLinks();
+
                 ImGui::Columns(2, "##WorldRequirements", false);
                 Requirement("Gamma address", g_offsets.gammaAddress != 0);
                 ImGui::NextColumn();
@@ -662,15 +648,16 @@ namespace
                 ImGui::SliderFloat("Time of day", &s.timeOfDay, 0.0f, 1.0f, "%.2f");
                 ImGui::Columns(1);
                 ImGui::Checkbox("Show coordinates", &s.showCoords);
+            ImGui::End();
             }
-
-            ImGui::EndChild();
         }
-        ImGui::End();
 
         if (s_offsetsWindowOpen)
         {
+            ImGui::SetNextWindowPos({ 240.0f, 120.0f }, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({ 560.0f, 620.0f }, ImGuiCond_FirstUseEver);
             ImGui::Begin("Offsets", &s_offsetsWindowOpen, ImGuiWindowFlags_NoCollapse);
+                DrawMenuLinks();
                 if (!s_offsetEditorLoaded)
                 {
                     s_offsetEditor.LoadFromIni();
@@ -956,10 +943,13 @@ namespace
 
         if (s_settingsWindowOpen)
         {
+            ImGui::SetNextWindowPos({ 720.0f, 140.0f }, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize({ 440.0f, 420.0f }, ImGuiCond_FirstUseEver);
             ImGui::Begin("Settings", &s_settingsWindowOpen, ImGuiWindowFlags_NoCollapse);
+                DrawMenuLinks();
                 ImGui::Columns(2, "##SettingsCols", false);
                 ImGui::Text("Insert: menu   F1-F5: toggles   F9: log   End: unload");
-                ImGui::Text("Ctrl+Arrows: move window");
+                ImGui::Text("Drag a title bar to move a window");
                 ImGui::Text("Ctrl+Shift+Arrows: move log window");
                 ImGui::NextColumn();
                 ImGui::Text("HUD");
@@ -996,8 +986,10 @@ namespace
 
 bool Menu::AnyWindowOpen()
 {
-    return Config::g_settings.menuOpen || s_debugConsoleOpen ||
-           s_offsetsWindowOpen || s_settingsWindowOpen;
+    return s_debugConsoleOpen ||
+           (Config::g_settings.menuOpen &&
+            (s_espWindowOpen || s_movementWindowOpen || s_worldWindowOpen ||
+             s_offsetsWindowOpen || s_settingsWindowOpen));
 }
 
 void Menu::PollHotkeys()
@@ -1017,6 +1009,22 @@ void Menu::PollHotkeys()
     if (insertDown && !insertHeld)
     {
         Config::g_settings.menuOpen = !Config::g_settings.menuOpen;
+        if (Config::g_settings.menuOpen)
+        {
+            // Insert always restores the three feature windows so the menu never comes back
+            // blank after the user closed individual windows with their title-bar X.
+            s_espWindowOpen = true;
+            s_movementWindowOpen = true;
+            s_worldWindowOpen = true;
+        }
+        else
+        {
+            s_espWindowOpen = false;
+            s_movementWindowOpen = false;
+            s_worldWindowOpen = false;
+            s_offsetsWindowOpen = false;
+            s_settingsWindowOpen = false;
+        }
         Log("Hotkey: Insert -> menu %s", Config::g_settings.menuOpen ? "open" : "closed");
     }
     insertHeld = insertDown;
@@ -1111,7 +1119,7 @@ void Menu::Draw()
     Features::ApplyWorld();
 
     // Velocity detection must keep running while the user holds Space, even if the Offsets
-    // tab is not open. Previously it only updated inside that tab and silently failed.
+    // window is not open. Previously it only updated inside that window and silently failed.
     if (s_velocitySession.active)
     {
         uint64_t detectedVelocity = 0;
@@ -1196,6 +1204,6 @@ void Menu::Draw()
         drawList->AddRectFilled({ 12.0f, 30.0f }, { 250.0f, 52.0f }, IM_COL32(0, 0, 0, 180));
         drawList->AddText({ 16.0f, 33.0f }, IM_COL32(0, 255, 170, 255),
                           "BedrockMenu  [INSERT]  [F9 LOG]");
-        DrawMainWindow();
+        DrawMenuWindows();
     }
 }

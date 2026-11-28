@@ -144,10 +144,10 @@ auto-setup. Both can be turned off independently.
 
 ### Menu layout
 
-The main menu uses three side-by-side vertical columns: **ESP**, **Movement**, and **World**.
-Drag a column header onto another header to reorder them. **Offsets** and **Settings** open as
-separate windows from the buttons at the top. Related controls are paired inside each column
-(for example requirement statuses, ESP toggles, and HUD settings).
+The menu is split into three independent windows: **ESP**, **Movement**, and **World**. Each one
+can be dragged and resized separately and closed with its own title-bar **X**. The small buttons at
+the top of each window reopen a closed section, including **Offsets** and **Settings**. Related
+controls are paired inside each window (for example requirement statuses and ESP toggles).
 
 The **ESP** column also has `Health bars`, `Show players`, `Show entities`, `Sort by distance`, and
 `Radar` controls. The radar appears in the bottom-right corner and plots nearby entities around
@@ -158,7 +158,7 @@ entities are treated as generic entities.
 
 ### Hotkeys / debug console
 
-- `Insert` — toggle the menu
+- `Insert` — toggle the menu; reopening it restores the three feature windows
 - `F1` — toggle Fly
 - `F2` — toggle Speed (remembers your last multiplier)
 - `F3` — toggle ESP
@@ -166,14 +166,14 @@ entities are treated as generic entities.
 - `F5` — toggle Coordinates
 - `F9` — toggle the in-game debug console (last 200 `Log()` lines, live, and closes it again)
 - `End` — unload the DLL
-- `Ctrl` + arrow keys — move the visible ImGui window
-- `Ctrl` + `Shift` + arrow keys — always move the debug console window
+- Drag a window title bar — move that individual window
+- `Ctrl` + `Shift` + arrow keys — move the debug console window
 
 With `DisableImGuiInput=0` (the default), the menu supports normal mouse dragging and the
 title-bar **X** button. Mouse state is read with `GetCursorPos`/`GetAsyncKeyState` and submitted
 through ImGui's `AddMousePosEvent`/`AddMouseButtonEvent` API — no WndProc subclassing and no writes
 to ImGui's legacy `io.MouseDown`/`io.MousePos` fields. With `DisableImGuiInput=1`, the UI is
-keyboard-only; `Insert`, `F9`, `End`, and the `Ctrl`-arrow mover still work.
+keyboard-only; `Insert`, `F9`, `End`, and the `Ctrl+Shift`-arrow debug-console mover still work.
 
 The optional Windows console is still available with `ShowConsole=1`, but it is off by default
 because `AllocConsole()` inside UWP can be unstable.
