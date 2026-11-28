@@ -277,6 +277,7 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
 
     double bestScore = 0.0;
     uint64_t bestOffset = 0;
+    size_t rejected = 0;
     std::vector<std::pair<double, uint64_t>> scores;
 
     for (size_t i = 0; i < session.candidates.size(); ++i)
@@ -284,11 +285,24 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
         Vec3 after{};
         if (!ReadVec3(session.player + session.candidates[i].offset, after)) continue;
 
+        // The old code accepted any value here, so a garbage float after the jump produced an
+        // impossible score (e.g. 6e16) and set EntityVelocity to an unrelated field.
+        if (!PlausibleVelocity(after)) { ++rejected; continue; }
+
         const Vec3& before = session.before[i];
+        const double dy = static_cast<double>(after.y) - before.y;
+        const double dx = static_cast<double>(after.x) - before.x;
+        const double dz = static_cast<double>(after.z) - before.z;
+        if (!Finite(static_cast<float>(dy)) || !Finite(static_cast<float>(dx)) ||
+            !Finite(static_cast<float>(dz))) continue;
+        if (std::fabs(dy) > 50.0 || std::fabs(dx) > 50.0 || std::fabs(dz) > 50.0)
+        {
+            ++rejected;
+            continue; // impossible for one jump frame
+        }
+
         // A jump changes vertical velocity first and most, so weight Y heavily.
-        const double score = std::fabs(after.y - before.y) * 10.0 +
-                             std::fabs(after.x - before.x) +
-                             std::fabs(after.z - before.z);
+        const double score = std::fabs(dy) * 10.0 + std::fabs(dx) + std::fabs(dz);
         scores.emplace_back(score, session.candidates[i].offset);
         if (score > bestScore)
         {
@@ -297,8 +311,11 @@ bool AutoDetect::UpdateVelocityScan(VelocitySession& session, bool jumpHeld, uin
         }
     }
 
+    if (rejected)
+        Log("AutoDetect: rejected %zu impossible velocity candidates", rejected);
+
     session.active = false;
-    if (bestScore > 0.01 && bestOffset != 0)
+    if (bestScore > 0.01 && bestScore < 500.0 && bestOffset != 0)
     {
         offset = bestOffset;
         Log("AutoDetect: velocity offset 0x%llX (score %.3f)",

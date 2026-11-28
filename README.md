@@ -21,8 +21,10 @@ This is experimental software. Read this before reporting an issue:
   `[Offsets]` values or run **Auto-detect** successfully.
 - **Fly uses `Offsets.EntityVelocity` by default.** When it is missing, enabling Fly starts a
   velocity scan that works from any menu tab: **release `Space`, then press and hold it once**.
-  The scan now keeps zero-velocity candidates (the old filter discarded them) and weights vertical
-  change, so a normal jump identifies the offset. If velocity genuinely cannot be found,
+  The scan now keeps zero-velocity candidates (the old filter discarded them), validates both
+  samples, rejects impossible deltas, and weights vertical change, so a normal jump identifies the
+  offset. On a fresh launch it retries quietly until the player is ready instead of wasting the
+  prompt with a 0-candidate scan. If velocity genuinely cannot be found,
   **Detect position (fallback)** in the Offsets tab can set `EntityPosition`: the mod then
   re-asserts your Y after each tick, **hold `Space` to climb, release it to hover**. The
   configured `FlySpeed` magnitude is used, so a negative value still climbs. Position detection

@@ -145,7 +145,7 @@ namespace
         return ImGui::ColorConvertFloat4ToU32(value);
     }
 
-    void StartFlySetupIfNeeded()
+    void StartFlySetupIfNeeded(bool quiet = false)
     {
         if (g_offsets.entityVelocity || s_velocitySession.active || s_velocityAutoPrompted)
             return;
@@ -160,10 +160,17 @@ namespace
                         sizeof(player));
         }
         if (!player) player = s_selectedPlayer;
-        if (!player)
+
+        // Do not run FindPlayerCandidates() here: it walks the whole game module and is too
+        // heavy for an automatic render-thread retry. The user can run it manually from the
+        // Offsets tab if this pointer stays invalid.
+        if (!player || !CanRead(reinterpret_cast<const void*>(player), sizeof(Vec3)))
         {
-            NotifyColored(IM_COL32(255, 120, 110, 255),
-                          "Fly: LocalPlayer is missing - run auto-setup first");
+            Log("Fly setup skipped: LocalPlayer 0x%llX is not readable",
+                static_cast<unsigned long long>(player));
+            if (!quiet)
+                NotifyColored(IM_COL32(255, 120, 110, 255),
+                              "Fly: LocalPlayer is missing - run auto-setup first");
             return;
         }
 
@@ -178,6 +185,16 @@ namespace
             if (CanRead(reinterpret_cast<const void*>(player + positionOffset), sizeof(Vec3)))
                 std::memcpy(&exclude, reinterpret_cast<const void*>(player + positionOffset),
                             sizeof(Vec3));
+        }
+
+        // On a fresh launch the world/player may not be initialized yet. Do not consume the
+        // one-time prompt with an empty scan; a retry will run once the game is loaded.
+        if (AutoDetect::FindVelocityCandidates(player, exclude).empty())
+        {
+            Log("Fly setup delayed: no velocity candidates yet (player not ready)");
+            if (!quiet)
+                NotifyColored(IM_COL32(255, 200, 110, 255), "Fly not ready yet - retrying");
+            return;
         }
 
         s_velocityAutoPrompted = true;
@@ -1085,11 +1102,18 @@ void Menu::Draw()
         }
     }
 
-    static bool initialFlySetupDone = false;
-    if (!initialFlySetupDone)
+    // Retry quietly until the player/ world is ready. A fresh launch can otherwise produce an
+    // empty 0-candidate scan and waste the one-time Space prompt.
+    static ULONGLONG lastFlySetupRetry = 0;
+    if (Config::g_settings.fly && !g_offsets.entityVelocity &&
+        !s_velocitySession.active && !s_velocityAutoPrompted)
     {
-        initialFlySetupDone = true;
-        if (Config::g_settings.fly) StartFlySetupIfNeeded();
+        const ULONGLONG now = GetTickCount64();
+        if (!lastFlySetupRetry || now - lastFlySetupRetry >= 2000)
+        {
+            lastFlySetupRetry = now;
+            StartFlySetupIfNeeded(true);
+        }
     }
 
     static bool lastFlyState = false;
