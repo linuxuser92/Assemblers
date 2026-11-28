@@ -39,20 +39,6 @@ static std::string s_setupStatus = "idle";
 
 namespace
 {
-    void DrawMenuLinks()
-    {
-        if (ImGui::SmallButton("ESP")) s_espWindowOpen = true;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Move")) s_movementWindowOpen = true;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("World")) s_worldWindowOpen = true;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Offsets")) s_offsetsWindowOpen = true;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Settings")) s_settingsWindowOpen = true;
-        ImGui::Separator();
-    }
-
     void HandleWindowMovement()
     {
         const auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
@@ -509,7 +495,6 @@ namespace
             }
             else
             {
-                DrawMenuLinks();
 
                 ImGui::Checkbox("Enable ESP", &s.espEnabled);
 
@@ -573,7 +558,6 @@ namespace
             }
             else
             {
-                DrawMenuLinks();
 
                 ImGui::Columns(2, "##MoveRequirements", false);
                 Requirement("LocalPlayer", g_offsets.localPlayerPointer != 0);
@@ -627,7 +611,6 @@ namespace
             }
             else
             {
-                DrawMenuLinks();
 
                 ImGui::Columns(2, "##WorldRequirements", false);
                 Requirement("Gamma address", g_offsets.gammaAddress != 0);
@@ -657,7 +640,6 @@ namespace
             ImGui::SetNextWindowPos({ 240.0f, 120.0f }, ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize({ 560.0f, 620.0f }, ImGuiCond_FirstUseEver);
             ImGui::Begin("Offsets", &s_offsetsWindowOpen, ImGuiWindowFlags_NoCollapse);
-                DrawMenuLinks();
                 if (!s_offsetEditorLoaded)
                 {
                     s_offsetEditor.LoadFromIni();
@@ -946,7 +928,6 @@ namespace
             ImGui::SetNextWindowPos({ 720.0f, 140.0f }, ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize({ 440.0f, 420.0f }, ImGuiCond_FirstUseEver);
             ImGui::Begin("Settings", &s_settingsWindowOpen, ImGuiWindowFlags_NoCollapse);
-                DrawMenuLinks();
                 ImGui::Columns(2, "##SettingsCols", false);
                 ImGui::Text("Insert: menu   F1-F5: toggles   F9: log   End: unload");
                 ImGui::Text("Drag a title bar to move a window");
@@ -1011,11 +992,13 @@ void Menu::PollHotkeys()
         Config::g_settings.menuOpen = !Config::g_settings.menuOpen;
         if (Config::g_settings.menuOpen)
         {
-            // Insert always restores the three feature windows so the menu never comes back
-            // blank after the user closed individual windows with their title-bar X.
+            // Insert is the only reopen path now that the navigation buttons are gone, so it
+            // restores every window after the user closes any of them with the title-bar X.
             s_espWindowOpen = true;
             s_movementWindowOpen = true;
             s_worldWindowOpen = true;
+            s_offsetsWindowOpen = true;
+            s_settingsWindowOpen = true;
         }
         else
         {

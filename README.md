@@ -152,9 +152,10 @@ auto-setup. Both can be turned off independently.
 ### Menu layout
 
 The menu is split into three independent windows: **ESP**, **Movement**, and **World**. Each one
-can be dragged and resized separately and closed with its own title-bar **X**. The small buttons at
-the top of each window reopen a closed section, including **Offsets** and **Settings**. Related
-controls are paired inside each window (for example requirement statuses and ESP toggles).
+can be dragged and resized separately and closed with its own title-bar **X**. **Offsets** and
+**Settings** are separate windows too. Press `Insert` to toggle the menu off and on again to
+restore any closed windows. Related controls are paired inside each window (for example requirement
+statuses and ESP toggles).
 
 The **ESP** column also has `Health bars`, `Show players`, `Show entities`, `Sort by distance`, and
 `Radar` controls. The radar appears in the bottom-right corner and plots nearby entities around
@@ -165,7 +166,7 @@ entities are treated as generic entities.
 
 ### Hotkeys / debug console
 
-- `Insert` — toggle the menu; reopening it restores the three feature windows
+- `Insert` — toggle the menu; reopening it restores all menu windows
 - `F1` — toggle Fly
 - `F2` — toggle Speed (remembers your last multiplier)
 - `F3` — toggle ESP
