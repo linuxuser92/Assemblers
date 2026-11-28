@@ -341,8 +341,8 @@ namespace
     void DrawDebugConsole(bool* open)
     {
         ImGui::SetNextWindowSize({ 760.0f, 420.0f }, ImGuiCond_FirstUseEver);
-        ImGui::SetWindowPos("BedrockMenu Debug Console", s_consolePos, ImGuiCond_Always);
-        if (!ImGui::Begin("BedrockMenu Debug Console", open))
+        ImGui::SetWindowPos("Assemblers Debug Console", s_consolePos, ImGuiCond_Always);
+        if (!ImGui::Begin("Assemblers Debug Console", open))
         {
             s_consolePos = ImGui::GetWindowPos();
             return;
@@ -1203,7 +1203,7 @@ void Menu::Draw()
         // the main window is off-screen or hidden by the game.
         drawList->AddRectFilled({ 12.0f, 30.0f }, { 250.0f, 52.0f }, IM_COL32(0, 0, 0, 180));
         drawList->AddText({ 16.0f, 33.0f }, IM_COL32(0, 255, 170, 255),
-                          "BedrockMenu  [INSERT]  [F9 LOG]");
+                          "Assemblers  [INSERT]  [F9 LOG]");
         DrawMenuWindows();
     }
 }

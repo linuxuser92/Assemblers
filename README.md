@@ -4,6 +4,9 @@ A **single-player-only** mod menu / debug overlay for **Minecraft Bedrock Editio
 It hooks D3D12 through MinHook, renders its UI with Dear ImGui (D3D12 backend), and draws ESP
 directly through the game's command queue.
 
+The in-game menu, overlay marker, and debug console are named **Assemblers**. The DLL, log, and
+config files keep their `BedrockMenu.*` names so existing loaders and setups keep working.
+
 > ⚠️ Use this only in your own single-player worlds. Do not use it on Realms, servers, or anyone
 > else's session. Modifying a commercial game may violate its EULA/terms — you are responsible
 > for how you use it. Offsets change **every game version**; this project ships no hardcoded

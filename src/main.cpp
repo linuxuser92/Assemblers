@@ -19,10 +19,10 @@ static DWORD WINAPI InitializeThread(LPVOID)
         FILE* dummy = nullptr;
         freopen_s(&dummy, "CONOUT$", "w", stdout);
         freopen_s(&dummy, "CONOUT$", "w", stderr);
-        SetConsoleTitleA("BedrockMenu - debug console");
+        SetConsoleTitleA("Assemblers - debug console");
     }
 
-    Log("BedrockMenu starting...");
+    Log("Assemblers starting...");
     Log("Config: console=%d d3dHooks=%d lateHook=%d imguiInput=%d",
         Config::g_settings.showConsole ? 1 : 0,
         Config::g_settings.disableD3DHooks ? 0 : 1,
